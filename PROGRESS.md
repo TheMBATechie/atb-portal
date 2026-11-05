@@ -10,7 +10,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 |---|---|---|
 | 0 | Scaffold + connect | done |
 | 1 | Inventory + overview | done |
-| 2 | Request form + status lookup | todo |
+| 2 | Request form + status lookup | done |
 | 3 | Auth + staff queue + prioritization | todo |
 | 4 | Matching + reservation (core) | todo |
 | 5 | Volunteer queue + pick list + fulfill | todo |
@@ -25,6 +25,10 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 0: shadcn's CLI now asks for a `-p <preset>` (nova/vega/maia/lyra/mira/luma/sera/rhea) in addition to `-b <base>` — plan file `CLAUDE.md`/`PROMPTS.md` assumptions about the old `init` flags were updated in-flight; no functional impact, just noting for future stages that also touch shadcn.
 - Stage 1: "this month's plan" (mentioned in PLAN.md section 6's `/staff` bullet) is skipped — it depends on the `bucket` field, which isn't meaningfully populated until Stage 3 (auth + staff queue + prioritization). Not stubbed with fake data; will be added in Stage 3.
 - Stage 1: filters on `/staff/inventory` are a plain server-rendered GET form (native `<select>`/`<input>`, no client JS, no shadcn Select) — simplest approach for a filter-and-submit flow, no auto-submit-on-change.
+- Stage 2: the live availability hint under the OS question is a static placeholder sentence, no real numbers — `matching.ts` doesn't exist until Stage 4.
+- Stage 2: no estimated-ready date is shown on `/status` — there's no column/computation for it until Stage 4+; intentionally omitted rather than faked.
+- Stage 2: `/status` uses a plain GET form (code + email in the query string), same pattern as `/staff/inventory`'s filters — email appears in the URL/browser history, an accepted tradeoff for a simple public "track my request" flow.
+- Stage 2: verified end-to-end via browser automation — test submission produced REQ-1007 (real row in the live Supabase project, matching the stage's literal "Done when" check) and `/status` correctly found it by code+email and correctly rejected a wrong email with a generic message.
 
 ## Manual steps done
 
