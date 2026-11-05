@@ -41,6 +41,7 @@ export type Candidate = {
   flags: string[];
   isSubstitute: boolean;
   reservedHere: boolean;
+  heldElsewhere: boolean; // reserved for a different request (only with includeHeldElsewhere)
 };
 
 export type LineMatch = {
@@ -118,7 +119,7 @@ export function matchLine(
   line: MatchLine,
   request: MatchRequest,
   devices: MatchDevice[],
-  options: { includeHolds?: boolean; today: string }
+  options: { includeHolds?: boolean; includeHeldElsewhere?: boolean; today: string }
 ): LineMatch {
   const category = lineCategory(line, request.purpose);
   const minGradeIndex = GRADE_ORDER.indexOf(line.min_grade);
@@ -129,13 +130,14 @@ export function matchLine(
   for (const d of devices) {
     const reservedHere = d.reserved_request_id === request.id;
     if (EXCLUDED_STATUSES.includes(d.status)) continue;
-    if (d.reserved_request_id && !reservedHere) continue;
+    const heldElsewhere = !!d.reserved_request_id && !reservedHere;
+    if (heldElsewhere && !options.includeHeldElsewhere) continue;
     const readiness = readinessOf(d.readiness_rank);
     if (readiness === "hold" && !options.includeHolds && !reservedHere) continue;
     if (d.reuse_cleared === "No") continue;
     if (d.grade_letter === "D") continue;
 
-    const flags: string[] = [];
+    const flags: string[] = heldElsewhere ? ["Held by another request"] : [];
     let isSubstitute = false;
 
     if (d.device_category !== category) {
@@ -158,7 +160,7 @@ export function matchLine(
       flags.push(`Substitute: grade ${d.grade_letter ?? "unknown"}`);
     }
 
-    scored.push({ device: d, readiness, flags, isSubstitute, reservedHere, osConfidence: os.confidence });
+    scored.push({ device: d, readiness, flags, isSubstitute, reservedHere, heldElsewhere, osConfidence: os.confidence });
   }
 
   const gradeRank = (g: string | null) => (g && GRADE_ORDER.includes(g) ? GRADE_ORDER.indexOf(g) : 9);
@@ -170,6 +172,7 @@ export function matchLine(
   scored.sort(
     (a, b) =>
       Number(b.reservedHere) - Number(a.reservedHere) ||
+      Number(a.heldElsewhere) - Number(b.heldElsewhere) ||
       Number(a.isSubstitute) - Number(b.isSubstitute) ||
       a.device.readiness_rank - b.device.readiness_rank ||
       a.osConfidence - b.osConfidence ||
@@ -185,8 +188,10 @@ export function matchLine(
     flags: s.flags,
     isSubstitute: s.isSubstitute,
     reservedHere: s.reservedHere,
+    heldElsewhere: s.heldElsewhere,
   }));
-  const picks = candidates.slice(0, line.quantity);
+  // Devices held by other requests are shown for reference but never picked or counted.
+  const picks = candidates.filter((c) => !c.heldElsewhere).slice(0, line.quantity);
   const counts: Record<Readiness, number> = { ready: 0, qa: 0, techPrep: 0, hold: 0 };
   for (const p of picks) counts[p.readiness]++;
   const shortfall = Math.max(0, line.quantity - picks.length);

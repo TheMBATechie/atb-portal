@@ -38,6 +38,9 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 4: the availability hint on `/request` assumes min grade B and counts Ready + QA devices per line.
 - Stage 4: fixed the Stage 3 `set_bucket` action. It now sets status `scheduled` only for submitted / needs_info / scheduled requests, so matched requests keep their status.
 - Stage 5: request status rules live in one place, `src/lib/request-status.ts` (`syncRequestStatus`). `in_prep` is never set automatically: the flow is matched/partially_matched → ready_for_pickup (all reserved devices Ready, and fully covered or partial allowed). Requests already `in_prep` stay there until ready.
+- MVP checkpoint (demo steps 3–5): two demo breakers fixed.
+  - Staff had no way to allow substitutes. The match panel now has an "Allow substitutes…" control (reason required, logged as `note`), so ATB-26-5321 can be offered as grade C.
+  - The double-booking block could only be shown with stale tabs. The match panel now has "Show devices held by other requests" (`?held=1`): held devices show a red "Held by REQ-…" badge, are never preselected, and reserving one hits the database DOUBLE_ALLOCATION block with the friendly message.
 - Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
 - Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
 - Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.

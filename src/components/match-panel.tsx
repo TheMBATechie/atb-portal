@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { releaseDevices, reserveDevices, swapDevice } from "@/app/staff/requests/actions";
+import { releaseDevices, reserveDevices, setAllowSubstitutes, swapDevice } from "@/app/staff/requests/actions";
 
 export type PanelDevice = {
   id: string;
@@ -32,6 +32,9 @@ export function MatchPanel({
   reserved,
   includeHolds,
   holdsToggleHref,
+  includeHeld,
+  heldToggleHref,
+  allowSubstitutes,
   canEdit,
 }: {
   requestId: string;
@@ -39,16 +42,25 @@ export function MatchPanel({
   reserved: PanelReserved[];
   includeHolds: boolean;
   holdsToggleHref: string;
+  includeHeld: boolean;
+  heldToggleHref: string;
+  allowSubstitutes: boolean;
   canEdit: boolean;
 }) {
   return (
     <section className="space-y-4 rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">Match devices</h2>
-        <Link href={holdsToggleHref} scroll={false} className="text-sm text-muted-foreground hover:underline">
-          {includeHolds ? "Hide devices on hold" : "Show devices on hold"}
-        </Link>
+        <span className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+          <Link href={holdsToggleHref} scroll={false} className="hover:underline">
+            {includeHolds ? "Hide devices on hold" : "Show devices on hold"}
+          </Link>
+          <Link href={heldToggleHref} scroll={false} className="hover:underline">
+            {includeHeld ? "Hide devices held by other requests" : "Show devices held by other requests"}
+          </Link>
+        </span>
       </div>
+      {canEdit && <SubstitutesControl requestId={requestId} allowed={allowSubstitutes} />}
       {!canEdit && (
         <p className="text-sm text-muted-foreground">
           This request is closed or declined, so devices can&apos;t be reserved for it.
@@ -58,7 +70,7 @@ export function MatchPanel({
       <ReservedList requestId={requestId} reserved={reserved} lines={lines} canEdit={canEdit} />
 
       {lines.map((line) => (
-        <LineMatcher key={`${line.lineId}-${includeHolds}-${reserved.length}`} requestId={requestId} line={line} canEdit={canEdit} />
+        <LineMatcher key={`${line.lineId}-${includeHolds}-${includeHeld}-${allowSubstitutes}-${reserved.length}`} requestId={requestId} line={line} canEdit={canEdit} />
       ))}
     </section>
   );
@@ -71,7 +83,11 @@ function FlagBadges({ device }: { device: PanelDevice }) {
         <span
           key={f}
           className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
-            f.startsWith("Substitute") ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"
+            f.startsWith("Substitute")
+              ? "bg-amber-100 text-amber-800"
+              : f.startsWith("Held by")
+                ? "bg-red-100 text-red-800"
+                : "bg-sky-100 text-sky-800"
           }`}
         >
           {f}
@@ -316,5 +332,65 @@ function ReservedRow({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
     </li>
+  );
+}
+
+function SubstitutesControl({ requestId, allowed }: { requestId: string; allowed: boolean }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(allow: boolean) {
+    setBusy(true);
+    setError(null);
+    const result = await setAllowSubstitutes({ requestId, allow, reason });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setEditing(false);
+    setReason("");
+    router.refresh();
+  }
+
+  return (
+    <div className="space-y-2 rounded-md bg-zinc-50 p-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>
+          Substitutes (lower grade, or desktop for laptop):{" "}
+          <span className="font-medium">{allowed ? "allowed" : "not allowed"}</span>
+        </span>
+        {!editing &&
+          (allowed ? (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => save(false)}>
+              Turn off
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              Allow substitutes…
+            </Button>
+          ))}
+      </div>
+      {editing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why? e.g. Partner OK'd a grade C laptop by phone"
+            className="h-8 min-w-0 flex-1 rounded-md border px-2 text-sm"
+          />
+          <Button size="sm" disabled={busy} onClick={() => save(true)}>
+            {busy ? "Saving…" : "Allow"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {error && <p className="text-destructive">{error}</p>}
+    </div>
   );
 }

@@ -344,3 +344,32 @@ export async function confirmHandoff(input: { requestId: string; deviceIds: stri
   }
   return { ok: true };
 }
+
+// MVP checkpoint: staff can allow substitutes after checking with the partner.
+export async function setAllowSubstitutes(input: {
+  requestId: string;
+  allow: boolean;
+  reason: string;
+}): Promise<ActionResult> {
+  const profile = await requireStaffActor();
+  if (!profile) return { ok: false, message: NOT_STAFF_ERROR };
+  const reason = input.reason.trim();
+  if (input.allow && !reason) return { ok: false, message: "Tell us why substitutes are OK for this request." };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("requests")
+    .update({ allow_substitutes: input.allow })
+    .eq("id", input.requestId);
+  if (error) return { ok: false, message: GENERIC_ERROR };
+
+  await logDecision({
+    requestId: input.requestId,
+    actor: profile.displayName,
+    action: "note",
+    fromValue: input.allow ? "substitutes off" : "substitutes on",
+    toValue: input.allow ? "substitutes on" : "substitutes off",
+    reason: reason || null,
+  });
+  return { ok: true };
+}

@@ -55,6 +55,15 @@ test("excludes deployed, recycled, D grade, reuse No, and devices held by anothe
   assert.deepEqual(ids(m).sort(), ["mine", "ok"]);
 });
 
+test("devices held by another request appear only with the toggle, flagged and never picked", () => {
+  const devices = [device({ id: "held", reserved_request_id: "R2" }), device({ id: "free", status: "Quality Assurance Zone", readiness_rank: 2 })];
+  assert.deepEqual(ids(matchLine(line(), req(), devices, { today: TODAY })), ["free"]);
+  const m = matchLine(line(), req(), devices, { today: TODAY, includeHeldElsewhere: true });
+  assert.deepEqual(ids(m), ["free", "held"]);
+  assert.deepEqual(m.candidates[1].flags, ["Held by another request"]);
+  assert.deepEqual(m.picks.map((p) => p.device.id), ["free"]);
+});
+
 test("holds only appear with the toggle", () => {
   const devices = [device({ id: "hold", status: "Hold - Repair", readiness_rank: 5 })];
   assert.equal(matchLine(line(), req(), devices, { today: TODAY }).candidates.length, 0);

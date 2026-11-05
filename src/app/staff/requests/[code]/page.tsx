@@ -66,7 +66,9 @@ export default async function StaffRequestDetailPage({
   searchParams,
 }: PageProps<"/staff/requests/[code]">) {
   const { code } = await params;
-  const includeHolds = (await searchParams).holds === "1";
+  const sp = await searchParams;
+  const includeHolds = sp.holds === "1";
+  const includeHeld = sp.held === "1";
   const supabase = createAdminClient();
 
   const { data: request, error: requestError } = await supabase
@@ -115,12 +117,27 @@ export default async function StaffRequestDetailPage({
   const canMatch = !["declined", "delivered", "partially_delivered", "closed"].includes(request.status);
   const today = todayIso();
 
+  // Request codes for devices held elsewhere (only loaded when that toggle is on).
+  const heldIds = includeHeld
+    ? [
+        ...new Set(
+          matchableDevices
+            .map((d) => d.reserved_request_id)
+            .filter((id): id is string => !!id && id !== request.id)
+        ),
+      ]
+    : [];
+  const { data: heldRequests } = heldIds.length
+    ? await supabase.from("requests").select("id, code").in("id", heldIds)
+    : { data: [] as { id: string; code: string }[] };
+  const heldByCode = new Map((heldRequests ?? []).map((r) => [r.id, r.code]));
+
   const panelLines: PanelLine[] = lines.map((line) => {
     const m = matchLine(
       line as MatchLine,
       { id: request.id, purpose: request.purpose, allow_substitutes: request.allow_substitutes },
       matchableDevices,
-      { includeHolds, today }
+      { includeHolds, includeHeldElsewhere: includeHeld, today }
     );
     const reservedOnLine = [...reservedLineById.values()].filter((l) => l === line.id).length;
     const open: Candidate[] = m.candidates.filter((c) => !c.reservedHere);
@@ -135,9 +152,20 @@ export default async function StaffRequestDetailPage({
       groups: GROUP_TITLES.map((g) => ({
         key: g.key,
         title: g.title,
-        devices: open.filter((c) => c.readiness === g.key).map((c) => toPanelDevice(c.device, c.flags)),
+        devices: open
+          .filter((c) => c.readiness === g.key)
+          .map((c) =>
+            toPanelDevice(
+              c.device,
+              c.flags.map((f) =>
+                f === "Held by another request"
+                  ? `Held by ${heldByCode.get(c.device.reserved_request_id ?? "") ?? "another request"}`
+                  : f
+              )
+            )
+          ),
       })),
-      preselected: open.slice(0, stillNeeded).map((c) => c.device.id),
+      preselected: open.filter((c) => !c.heldElsewhere).slice(0, stillNeeded).map((c) => c.device.id),
     };
   });
 
@@ -154,7 +182,10 @@ export default async function StaffRequestDetailPage({
   const needsReplacement =
     !!lastReplacementNote && (!lastReserve || lastReserve.created_at < lastReplacementNote.created_at);
 
-  const holdsToggleHref = `/staff/requests/${request.code}${includeHolds ? "" : "?holds=1"}`;
+  const toggleHref = (holds: boolean, held: boolean) => {
+    const q = [holds && "holds=1", held && "held=1"].filter(Boolean).join("&");
+    return `/staff/requests/${request.code}${q ? `?${q}` : ""}`;
+  };
   const partnerHistory = partnerHistoryRes.data ?? [];
   const deviceHistory = deviceHistoryRes.data ?? [];
 
@@ -337,7 +368,10 @@ export default async function StaffRequestDetailPage({
         lines={panelLines}
         reserved={panelReserved}
         includeHolds={includeHolds}
-        holdsToggleHref={holdsToggleHref}
+        holdsToggleHref={toggleHref(!includeHolds, includeHeld)}
+        includeHeld={includeHeld}
+        heldToggleHref={toggleHref(includeHolds, !includeHeld)}
+        allowSubstitutes={request.allow_substitutes}
         canEdit={canMatch}
       />
 
