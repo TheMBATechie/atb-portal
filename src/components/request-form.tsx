@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { submitRequest, type SubmitRequestInput } from "@/app/request/actions";
+import { getAvailabilityHint, submitRequest, type SubmitRequestInput } from "@/app/request/actions";
 import {
   NEEDS_OPTIONS,
   OS_PREF_OPTIONS,
@@ -24,6 +24,10 @@ import {
 
 type Partner = { id: string; name: string };
 type Line = { id: string; category: RequestLineCategory; quantity: number };
+
+function labelForCategory(category: RequestLineCategory): string {
+  return REQUEST_LINE_CATEGORIES.find((c) => c.value === category)?.label ?? category;
+}
 
 function Tag({ tag }: { tag: "must" | "nice" }) {
   return (
@@ -90,6 +94,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
 
   const [osPref, setOsPref] = useState<OsPref>("any");
   const [osFirm, setOsFirm] = useState(false);
+  const [availability, setAvailability] = useState<number[] | null>(null);
 
   const [needs, setNeeds] = useState<Need[]>([]);
 
@@ -107,6 +112,25 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Live availability hint: re-check shortly after the answers stop changing.
+  const lineKey = lines.map((l) => l.category).join(",");
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const counts = await getAvailabilityHint({
+        lines: lineKey.split(",").map((c) => ({ deviceCategory: c as RequestLineCategory, quantity: 1 })),
+        osPref,
+        purpose,
+        allowSubstitutes,
+      });
+      if (!cancelled) setAvailability(counts);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [lineKey, osPref, purpose, allowSubstitutes]);
 
   function addLine() {
     lineCounter.current += 1;
@@ -349,9 +373,18 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
           This is a hard requirement, not just a preference
         </label>
 
-        <p className="text-xs text-muted-foreground">
-          We&apos;ll show how many matching devices are available here once this feature is ready.
-        </p>
+        {availability && (
+          <ul className="text-xs text-muted-foreground">
+            {lines.map((line, i) =>
+              availability[i] === undefined ? null : (
+                <li key={line.id}>
+                  {labelForCategory(line.category)}: about {availability[i]} matching device
+                  {availability[i] === 1 ? " is" : "s are"} ready now or in final checks.
+                </li>
+              )
+            )}
+          </ul>
+        )}
         {osPref === "any" && (
           <p className="text-xs font-medium text-zinc-700">Flexible requests usually arrive sooner.</p>
         )}

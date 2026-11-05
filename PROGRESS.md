@@ -12,7 +12,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 | 1 | Inventory + overview | done |
 | 2 | Request form + status lookup | done |
 | 3 | Auth + staff queue + prioritization | done |
-| 4 | Matching + reservation (core) | todo |
+| 4 | Matching + reservation (core) | done |
 | 5 | Volunteer queue + pick list + fulfill | todo |
 | 6 | AI intake | todo |
 | 7 | Partner history, feedback, impact | todo |
@@ -31,6 +31,12 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 2: verified end-to-end via browser automation — test submission produced REQ-1007 (real row in the live Supabase project, matching the stage's literal "Done when" check) and `/status` correctly found it by code+email and correctly rejected a wrong email with a generic message.
 - Stage 3: `/volunteer` is a placeholder page (sign-in landing for volunteers) until Stage 5. Volunteers who open `/staff/*` are redirected there.
 - Stage 3: "Raising priority requires a reason" applies only when lowering the number of an already-set priority; setting a priority for the first time doesn't require one.
+- Stage 4: "short" in the match summary means "not covered by devices that are Ready or in QA right now". REQ-1003 reads "15 needed: 2 ready now, 12 in QA, 1 short. 1 can come from Technical Prep. Estimated ready by Nov 12." "N not available at all" is added only when no device fits.
+- Stage 4: ranking puts devices already reserved for this request first, and exact matches before substitutes. Within each group it follows PLAN.md (readiness → OS confidence → grade → age → batch → id). Devices with no grade count as below the minimum (shown only as substitutes).
+- Stage 4: `needs` (webcam etc.) are not used in matching. PLAN.md section 5 has no rule for them.
+- Stage 4: tests run with `npm test` (Node's built-in runner, no new dependency). `src/lib/matching.fixture.json` is a Nov 5 snapshot of non-deployed devices for the REQ-1003 check. `*.test.ts` is excluded from tsconfig.
+- Stage 4: the availability hint on `/request` assumes min grade B and counts Ready + QA devices per line.
+- Stage 4: fixed the Stage 3 `set_bucket` action. It now sets status `scheduled` only for submitted / needs_info / scheduled requests, so matched requests keep their status.
 
 ## Manual steps done
 

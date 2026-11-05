@@ -1,6 +1,8 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/server-admin";
+import { availableNowCount } from "@/lib/matching";
+import { loadMatchableDevices } from "@/lib/match-data";
 import type { Need, OsPref, Purpose, RequestLineCategory, Setup, Urgency, UseType } from "@/lib/requests";
 
 export type PartnerSelection =
@@ -166,4 +168,25 @@ export async function submitRequest(input: SubmitRequestInput): Promise<SubmitRe
   }
 
   return { ok: true, code: request.code };
+}
+
+// Live hint under the OS question. Public, so it returns counts only.
+export async function getAvailabilityHint(input: {
+  lines: RequestLineInput[];
+  osPref: OsPref;
+  purpose: Purpose | null;
+  allowSubstitutes: boolean;
+}): Promise<number[] | null> {
+  try {
+    const devices = await loadMatchableDevices();
+    return input.lines.slice(0, 10).map((line) =>
+      availableNowCount(
+        { device_category: line.deviceCategory, quantity: 1, os_pref: input.osPref, min_grade: "B" },
+        { purpose: input.purpose, allow_substitutes: input.allowSubstitutes },
+        devices
+      )
+    );
+  } catch {
+    return null;
+  }
 }

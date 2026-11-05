@@ -14,6 +14,31 @@ import {
 import { suggestedPriorityScore } from "@/lib/priority-score";
 import { PriorityBucketControls } from "@/components/priority-bucket-controls";
 import { DeclineDeferControls } from "@/components/decline-defer-controls";
+import { MatchPanel, type PanelDevice, type PanelLine, type PanelReserved } from "@/components/match-panel";
+import { matchLine, type Candidate, type MatchDevice, type MatchLine } from "@/lib/matching";
+import { loadMatchableDevices } from "@/lib/match-data";
+
+const GROUP_TITLES = [
+  { key: "ready", title: "Ready For Deployment" },
+  { key: "qa", title: "In QA" },
+  { key: "techPrep", title: "Technical Prep" },
+  { key: "hold", title: "On hold" },
+] as const;
+
+function toPanelDevice(d: MatchDevice, flags: string[] = []): PanelDevice {
+  return {
+    id: d.id,
+    label: d.device_model ? `${d.device_type} · ${d.device_model}` : d.device_type,
+    status: d.status,
+    grade: d.grade_letter,
+    location: d.location,
+    flags,
+  };
+}
+
+function todayIso(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
 
 export const instant = false;
 
@@ -35,8 +60,12 @@ function fmtDate(value: string | null): string {
   return DATE_FORMAT.format(new Date(`${value}T00:00:00`));
 }
 
-export default async function StaffRequestDetailPage({ params }: PageProps<"/staff/requests/[code]">) {
+export default async function StaffRequestDetailPage({
+  params,
+  searchParams,
+}: PageProps<"/staff/requests/[code]">) {
   const { code } = await params;
+  const includeHolds = (await searchParams).holds === "1";
   const supabase = createAdminClient();
 
   const { data: request, error: requestError } = await supabase
@@ -49,7 +78,7 @@ export default async function StaffRequestDetailPage({ params }: PageProps<"/sta
 
   if (requestError || !request) notFound();
 
-  const [linesRes, partnerHistoryRes, deviceHistoryRes, logRes] = await Promise.all([
+  const [linesRes, partnerHistoryRes, deviceHistoryRes, logRes, matchableDevices, reservedRes] = await Promise.all([
     supabase
       .from("request_lines")
       .select("id, device_category, quantity, os_pref, os_firm, needs, min_grade")
@@ -75,9 +104,47 @@ export default async function StaffRequestDetailPage({ params }: PageProps<"/sta
       .select("id, actor, action, from_value, to_value, detail, reason, created_at")
       .eq("request_id", request.id)
       .order("created_at", { ascending: false }),
+    loadMatchableDevices(),
+    supabase.from("devices").select("id, reserved_line_id").eq("reserved_request_id", request.id),
   ]);
 
   const lines = linesRes.data ?? [];
+  const reservedLineById = new Map((reservedRes.data ?? []).map((d) => [d.id, d.reserved_line_id as string | null]));
+  const canMatch = !["declined", "delivered", "partially_delivered", "closed"].includes(request.status);
+  const today = todayIso();
+
+  const panelLines: PanelLine[] = lines.map((line) => {
+    const m = matchLine(
+      line as MatchLine,
+      { id: request.id, purpose: request.purpose, allow_substitutes: request.allow_substitutes },
+      matchableDevices,
+      { includeHolds, today }
+    );
+    const reservedOnLine = [...reservedLineById.values()].filter((l) => l === line.id).length;
+    const open: Candidate[] = m.candidates.filter((c) => !c.reservedHere);
+    const stillNeeded = Math.max(0, line.quantity - reservedOnLine);
+    return {
+      lineId: line.id,
+      title: `${line.quantity}× ${labelFor(REQUEST_LINE_CATEGORIES, line.device_category)}${
+        line.os_pref !== "any" ? ` · ${labelFor(OS_PREF_OPTIONS, line.os_pref)}${line.os_firm ? " (required)" : ""}` : ""
+      } · grade ${line.min_grade} or better`,
+      summary: m.summary,
+      stillNeeded,
+      groups: GROUP_TITLES.map((g) => ({
+        key: g.key,
+        title: g.title,
+        devices: open.filter((c) => c.readiness === g.key).map((c) => toPanelDevice(c.device, c.flags)),
+      })),
+      preselected: open.slice(0, stillNeeded).map((c) => c.device.id),
+    };
+  });
+
+  const panelReserved: PanelReserved[] = matchableDevices
+    .filter((d) => d.reserved_request_id === request.id)
+    .sort((a, b) => a.readiness_rank - b.readiness_rank || a.id.localeCompare(b.id))
+    .map((d) => ({ ...toPanelDevice(d), lineId: reservedLineById.get(d.id) ?? lines[0]?.id ?? "" }));
+
+  const holdsToggleHref = `/staff/requests/${request.code}${includeHolds ? "" : "?holds=1"}`;
   const partnerHistory = partnerHistoryRes.data ?? [];
   const deviceHistory = deviceHistoryRes.data ?? [];
   const decisionLog = logRes.data ?? [];
@@ -250,10 +317,14 @@ export default async function StaffRequestDetailPage({ params }: PageProps<"/sta
 
       <DeclineDeferControls requestId={request.id} status={request.status} declineMessage={request.decline_message} />
 
-      <section className="rounded-lg border border-dashed bg-zinc-50 p-4">
-        <h2 className="font-semibold text-zinc-500">Match devices</h2>
-        <p className="text-sm text-muted-foreground">Coming in Stage 4.</p>
-      </section>
+      <MatchPanel
+        requestId={request.id}
+        lines={panelLines}
+        reserved={panelReserved}
+        includeHolds={includeHolds}
+        holdsToggleHref={holdsToggleHref}
+        canEdit={canMatch}
+      />
 
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-3 font-semibold">Decision log</h2>
