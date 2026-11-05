@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { getCurrentProfile } from "@/lib/auth";
+import { logDecision, syncRequestStatus } from "@/lib/request-status";
 
 export type ActionResult = { ok: true } | { ok: false; message: string };
 
@@ -12,28 +13,6 @@ async function requireStaffActor() {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "staff") return null;
   return profile;
-}
-
-async function logDecision(params: {
-  requestId: string;
-  actor: string;
-  action: string;
-  fromValue: string | null;
-  toValue: string | null;
-  detail?: string | null;
-  reason?: string | null;
-}) {
-  const admin = createAdminClient();
-  const { error } = await admin.from("decision_log").insert({
-    request_id: params.requestId,
-    actor: params.actor,
-    action: params.action,
-    from_value: params.fromValue,
-    to_value: params.toValue,
-    detail: params.detail ?? null,
-    reason: params.reason ?? null,
-  });
-  if (error) console.error("decision_log insert failed", params, error);
 }
 
 export async function setStaffPriority(input: {
@@ -159,8 +138,6 @@ export async function declineRequest(input: { requestId: string; message: string
 // Stage 4: reservation (always through the database functions)
 // ---------------------------------------------------------------
 
-const MATCHABLE_STATUSES = ["submitted", "needs_info", "scheduled", "matched", "partially_matched"];
-
 // Turns database errors into a sentence naming the device and the request holding it.
 async function friendlyReserveError(message: string): Promise<string> {
   const admin = createAdminClient();
@@ -187,38 +164,6 @@ async function friendlyReserveError(message: string): Promise<string> {
   return GENERIC_ERROR;
 }
 
-// After reserving or releasing: matched / partially_matched / back to planning.
-async function refreshMatchStatus(requestId: string, actor: string) {
-  const admin = createAdminClient();
-  const [{ data: request }, { data: lines }, { count }] = await Promise.all([
-    admin.from("requests").select("status, bucket").eq("id", requestId).maybeSingle(),
-    admin.from("request_lines").select("quantity").eq("request_id", requestId),
-    admin.from("devices").select("id", { count: "exact", head: true }).eq("reserved_request_id", requestId),
-  ]);
-  if (!request || !MATCHABLE_STATUSES.includes(request.status)) return;
-
-  const needed = (lines ?? []).reduce((sum, l) => sum + l.quantity, 0);
-  const reserved = count ?? 0;
-  let next: string;
-  if (reserved > 0 && reserved >= needed) next = "matched";
-  else if (reserved > 0) next = "partially_matched";
-  else if (request.status === "matched" || request.status === "partially_matched")
-    next = request.bucket ? "scheduled" : "submitted";
-  else return;
-
-  if (next === request.status) return;
-  const { error } = await admin.from("requests").update({ status: next }).eq("id", requestId);
-  if (error) return;
-  await logDecision({
-    requestId,
-    actor,
-    action: "set_status",
-    fromValue: request.status,
-    toValue: next,
-    detail: `${reserved} of ${needed} devices set aside`,
-  });
-}
-
 export async function reserveDevices(input: {
   requestId: string;
   lineId: string;
@@ -237,7 +182,7 @@ export async function reserveDevices(input: {
   });
   if (error) return { ok: false, message: await friendlyReserveError(error.message) };
 
-  await refreshMatchStatus(input.requestId, profile.displayName);
+  await syncRequestStatus(input.requestId, profile.displayName);
   return { ok: true };
 }
 
@@ -260,7 +205,7 @@ export async function releaseDevices(input: {
   });
   if (error) return { ok: false, message: GENERIC_ERROR };
 
-  await refreshMatchStatus(input.requestId, profile.displayName);
+  await syncRequestStatus(input.requestId, profile.displayName);
   return { ok: true };
 }
 
@@ -312,7 +257,7 @@ export async function swapDevice(input: {
     fromValue: input.oldDeviceId,
     toValue: input.newDeviceId,
   });
-  await refreshMatchStatus(input.requestId, profile.displayName);
+  await syncRequestStatus(input.requestId, profile.displayName);
   return { ok: true };
 }
 
@@ -347,5 +292,55 @@ export async function deferRequest(input: { requestId: string; message: string }
     reason: message,
   });
 
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------
+// Stage 5: confirm handoff (writes the sheet's deployment columns)
+// ---------------------------------------------------------------
+
+export async function confirmHandoff(input: { requestId: string; deviceIds: string[] }): Promise<ActionResult> {
+  const profile = await requireStaffActor();
+  if (!profile) return { ok: false, message: NOT_STAFF_ERROR };
+  if (input.deviceIds.length === 0) return { ok: false, message: "Tick at least one device to hand over." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("fulfill_devices", {
+    p_request_id: input.requestId,
+    p_device_ids: input.deviceIds,
+    p_actor: profile.displayName,
+  });
+  if (error) {
+    if (error.message.includes("NOT_READY")) {
+      const ids = error.message.match(/[A-Z]{2,}-\d+-\d+/g) ?? [];
+      return {
+        ok: false,
+        message: `${ids.join(", ") || "Some devices"} must be Ready For Deployment and set aside for this request before handoff. Nothing was handed over.`,
+      };
+    }
+    return { ok: false, message: GENERIC_ERROR };
+  }
+
+  const [{ data: request }, { data: lines }, { count: placed }] = await Promise.all([
+    admin.from("requests").select("status").eq("id", input.requestId).maybeSingle(),
+    admin.from("request_lines").select("quantity").eq("request_id", input.requestId),
+    admin.from("devices").select("id", { count: "exact", head: true }).eq("placed_request_id", input.requestId),
+  ]);
+  const needed = (lines ?? []).reduce((sum, l) => sum + l.quantity, 0);
+  const next = (placed ?? 0) >= needed ? "delivered" : "partially_delivered";
+
+  if (request && request.status !== next) {
+    const { error: updateError } = await admin.from("requests").update({ status: next }).eq("id", input.requestId);
+    if (!updateError) {
+      await logDecision({
+        requestId: input.requestId,
+        actor: profile.displayName,
+        action: "set_status",
+        fromValue: request.status,
+        toValue: next,
+        detail: `${placed ?? 0} of ${needed} devices handed over`,
+      });
+    }
+  }
   return { ok: true };
 }

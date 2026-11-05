@@ -22,3 +22,15 @@ export type DeviceCategory = (typeof DEVICE_CATEGORIES)[number];
 export function isDeviceCategory(value: unknown): value is DeviceCategory {
   return DEVICE_CATEGORIES.includes(value as DeviceCategory);
 }
+
+// Accessories to pack, same defaults fulfill_devices writes to the sheet.
+export function accessoriesFor(device: { device_type: string; accessories: string | null }): string {
+  if (device.accessories) return device.accessories;
+  if (device.device_type.startsWith("Desktop")) return "Keyboard, Mouse, Power Cord";
+  if (device.device_type.startsWith("Laptop") || device.device_type === "Chromebook" || device.device_type.startsWith("Tablet"))
+    return "Charger";
+  return "None";
+}
+
+export const QA_RESULTS = ["Pass", "Pass with Approved Limitation", "Fail"] as const;
+export type QaResult = (typeof QA_RESULTS)[number];

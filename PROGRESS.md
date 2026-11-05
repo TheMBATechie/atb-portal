@@ -13,7 +13,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 | 2 | Request form + status lookup | done |
 | 3 | Auth + staff queue + prioritization | done |
 | 4 | Matching + reservation (core) | done |
-| 5 | Volunteer queue + pick list + fulfill | todo |
+| 5 | Volunteer queue + pick list + fulfill | done |
 | 6 | AI intake | todo |
 | 7 | Partner history, feedback, impact | todo |
 | 8 | Nice-to-haves | todo |
@@ -37,6 +37,10 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 4: tests run with `npm test` (Node's built-in runner, no new dependency). `src/lib/matching.fixture.json` is a Nov 5 snapshot of non-deployed devices for the REQ-1003 check. `*.test.ts` is excluded from tsconfig.
 - Stage 4: the availability hint on `/request` assumes min grade B and counts Ready + QA devices per line.
 - Stage 4: fixed the Stage 3 `set_bucket` action. It now sets status `scheduled` only for submitted / needs_info / scheduled requests, so matched requests keep their status.
+- Stage 5: request status rules live in one place, `src/lib/request-status.ts` (`syncRequestStatus`). `in_prep` is never set automatically: the flow is matched/partially_matched → ready_for_pickup (all reserved devices Ready, and fully covered or partial allowed). Requests already `in_prep` stay there until ready.
+- Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
+- Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
+- Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.
 
 ## Manual steps done
 

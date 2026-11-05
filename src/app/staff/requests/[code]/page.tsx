@@ -17,6 +17,7 @@ import { DeclineDeferControls } from "@/components/decline-defer-controls";
 import { MatchPanel, type PanelDevice, type PanelLine, type PanelReserved } from "@/components/match-panel";
 import { matchLine, type Candidate, type MatchDevice, type MatchLine } from "@/lib/matching";
 import { loadMatchableDevices } from "@/lib/match-data";
+import { HandoffPanel } from "@/components/handoff-panel";
 
 const GROUP_TITLES = [
   { key: "ready", title: "Ready For Deployment" },
@@ -109,6 +110,7 @@ export default async function StaffRequestDetailPage({
   ]);
 
   const lines = linesRes.data ?? [];
+  const decisionLog = logRes.data ?? [];
   const reservedLineById = new Map((reservedRes.data ?? []).map((d) => [d.id, d.reserved_line_id as string | null]));
   const canMatch = !["declined", "delivered", "partially_delivered", "closed"].includes(request.status);
   const today = todayIso();
@@ -144,10 +146,17 @@ export default async function StaffRequestDetailPage({
     .sort((a, b) => a.readiness_rank - b.readiness_rank || a.id.localeCompare(b.id))
     .map((d) => ({ ...toPanelDevice(d), lineId: reservedLineById.get(d.id) ?? lines[0]?.id ?? "" }));
 
+  // A failed QA since the last reservation means staff should pick a replacement.
+  const lastReplacementNote = decisionLog.find(
+    (e) => e.action === "note" && (e.detail ?? "").startsWith("Needs a replacement")
+  );
+  const lastReserve = decisionLog.find((e) => e.action === "reserve");
+  const needsReplacement =
+    !!lastReplacementNote && (!lastReserve || lastReserve.created_at < lastReplacementNote.created_at);
+
   const holdsToggleHref = `/staff/requests/${request.code}${includeHolds ? "" : "?holds=1"}`;
   const partnerHistory = partnerHistoryRes.data ?? [];
   const deviceHistory = deviceHistoryRes.data ?? [];
-  const decisionLog = logRes.data ?? [];
 
   const currentYear = new Date().getFullYear();
   const devicesPlacedThisYear = deviceHistory.filter(
@@ -317,6 +326,12 @@ export default async function StaffRequestDetailPage({
 
       <DeclineDeferControls requestId={request.id} status={request.status} declineMessage={request.decline_message} />
 
+      {needsReplacement && canMatch && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {lastReplacementNote?.detail}. Pick a replacement below.
+        </div>
+      )}
+
       <MatchPanel
         requestId={request.id}
         lines={panelLines}
@@ -324,6 +339,15 @@ export default async function StaffRequestDetailPage({
         includeHolds={includeHolds}
         holdsToggleHref={holdsToggleHref}
         canEdit={canMatch}
+      />
+
+      <HandoffPanel
+        requestId={request.id}
+        requestCode={request.code}
+        readyDevices={panelReserved
+          .filter((d) => d.status === "Ready For Deployment")
+          .map((d) => ({ id: d.id, label: d.label, location: d.location }))}
+        notReadyCount={panelReserved.filter((d) => d.status !== "Ready For Deployment").length}
       />
 
       <section className="rounded-lg border bg-white p-4">
