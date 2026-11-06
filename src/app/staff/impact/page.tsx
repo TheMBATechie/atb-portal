@@ -16,7 +16,7 @@ function Bars({ items }: { items: { name: string; count: number; href?: string }
           <span className="truncate">{i.href ? <Link href={i.href} className="hover:underline">{i.name}</Link> : i.name}</span>
           <span className="tabular-nums text-muted-foreground">{i.count}</span>
           <span className="col-span-2 h-1.5 rounded bg-zinc-100">
-            <span className="block h-1.5 rounded bg-sky-600" style={{ width: `${(i.count / max) * 100}%` }} />
+            <span className="block h-1.5 rounded bg-atb-coral" style={{ width: `${(i.count / max) * 100}%` }} />
           </span>
         </li>
       ))}

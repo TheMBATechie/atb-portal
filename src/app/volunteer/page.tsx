@@ -48,7 +48,7 @@ function DeviceCard({ device, request }: { device: QueueDevice; request?: QueueR
       )}
       {device.status === "Ready For Deployment" ? (
         request && (
-          <Link href={`/volunteer/picklist/${request.code}`} className="text-sm font-medium text-sky-700 hover:underline">
+          <Link href={`/volunteer/picklist/${request.code}`} className="text-sm font-medium text-atb-green hover:underline">
             Ready. Open the pick list for {request.code} &rarr;
           </Link>
         )
@@ -160,7 +160,7 @@ export default async function VolunteerQueuePage({ searchParams }: PageProps<"/v
                 </ul>
               )}
               {!showAll && all.length > BACKLOG_LIMIT && (
-                <Link href="/volunteer?all=1" className="text-sm text-sky-700 hover:underline">
+                <Link href="/volunteer?all=1" className="text-sm text-atb-green hover:underline">
                   Show all {all.length}
                 </Link>
               )}

@@ -93,7 +93,7 @@ function FlagBadges({ device }: { device: PanelDevice }) {
               ? "bg-amber-100 text-amber-800"
               : f.startsWith("Held by")
                 ? "bg-red-100 text-red-800"
-                : "bg-sky-100 text-sky-800"
+                : "bg-atb-peach text-atb-navy"
           }`}
         >
           {f}

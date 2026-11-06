@@ -62,7 +62,7 @@ export function ThankYouDraft({ donor }: { donor: string }) {
             <Button size="sm" onClick={handleCopy}>
               {copied ? "Copied" : "Copy"}
             </Button>
-            <a href={mailto} className="text-sm text-sky-700 hover:underline">
+            <a href={mailto} className="text-sm text-atb-green hover:underline">
               Open in email
             </a>
             <span className="text-xs text-muted-foreground">You&apos;ll add the donor&apos;s email address.</span>

@@ -181,7 +181,7 @@ export function RequestForm({ partners, mode = "partner" }: { partners: Partner[
   }
 
   function sectionClass(key: SectionKey, spacing = "space-y-3") {
-    const highlight = aiFilled.has(key) ? " border-violet-400 ring-2 ring-violet-200" : "";
+    const highlight = aiFilled.has(key) ? " border-atb-coral ring-2 ring-atb-apricot" : "";
     return `${spacing} rounded-lg border bg-white p-4${highlight}`;
   }
 
@@ -380,7 +380,7 @@ export function RequestForm({ partners, mode = "partner" }: { partners: Partner[
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <section className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/60 p-4">
+      <section className="space-y-3 rounded-lg border border-atb-apricot bg-atb-blush p-4">
         <div className={labelRow}>
           <h2 className="font-semibold">
             {mode === "staff" ? "Paste an email" : "Tell us what you need in your own words"}

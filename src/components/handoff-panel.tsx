@@ -53,7 +53,7 @@ export function HandoffPanel({
     <section className="space-y-3 rounded-lg border bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">Hand over to partner</h2>
-        <Link href={`/volunteer/picklist/${requestCode}`} className="text-sm text-sky-700 hover:underline">
+        <Link href={`/volunteer/picklist/${requestCode}`} className="text-sm text-atb-green hover:underline">
           Open pick list &rarr;
         </Link>
       </div>
