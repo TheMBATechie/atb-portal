@@ -11,40 +11,45 @@ const BUCKET_OPTIONS = [
   { value: "later", label: "Later" },
 ] as const;
 
+const segment = (selected: boolean) =>
+  `rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+    selected ? "border-atb-navy bg-atb-navy text-white" : "border-zinc-300 bg-white text-atb-navy hover:border-atb-navy/60"
+  }`;
+
+// Staff priority (1 = most urgent) and which month to plan the request for.
 export function PriorityBucketControls({
   requestId,
   currentPriority,
   currentBucket,
+  disabled,
 }: {
   requestId: string;
   currentPriority: number | null;
   currentBucket: string | null;
+  disabled?: boolean;
 }) {
   const router = useRouter();
 
-  const [priority, setPriority] = useState(currentPriority ? String(currentPriority) : "");
+  const [priority, setPriority] = useState<number | null>(currentPriority);
   const [priorityReason, setPriorityReason] = useState("");
   const [priorityBusy, setPriorityBusy] = useState(false);
   const [priorityError, setPriorityError] = useState<string | null>(null);
 
-  const [bucket, setBucketValue] = useState(currentBucket ?? "");
+  const [bucket, setBucketValue] = useState<string | null>(currentBucket);
   const [bucketReason, setBucketReason] = useState("");
   const [bucketBusy, setBucketBusy] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
 
-  const priorityNum = Number(priority);
-  const needsPriorityReason =
-    currentPriority !== null && Number.isInteger(priorityNum) && priorityNum < currentPriority;
-  const needsBucketReason = bucket === "this_month";
+  const priorityChanged = priority !== null && priority !== currentPriority;
+  const needsPriorityReason = currentPriority !== null && priority !== null && priority < currentPriority;
+  const bucketChanged = bucket !== null && bucket !== currentBucket;
+  const needsBucketReason = bucketChanged && bucket === "this_month";
 
   async function handleSavePriority() {
-    if (!priority) {
-      setPriorityError("Choose a priority.");
-      return;
-    }
+    if (priority === null) return;
     setPriorityBusy(true);
     setPriorityError(null);
-    const result = await setStaffPriority({ requestId, newPriority: Number(priority), reason: priorityReason });
+    const result = await setStaffPriority({ requestId, newPriority: priority, reason: priorityReason });
     setPriorityBusy(false);
     if (!result.ok) {
       setPriorityError(result.message);
@@ -55,10 +60,7 @@ export function PriorityBucketControls({
   }
 
   async function handleSaveBucket() {
-    if (!bucket) {
-      setBucketError("Choose a bucket.");
-      return;
-    }
+    if (!bucket) return;
     setBucketBusy(true);
     setBucketError(null);
     const result = await setBucket({
@@ -76,61 +78,92 @@ export function PriorityBucketControls({
   }
 
   return (
-    <section className="rounded-lg border bg-white p-4">
-      <h2 className="mb-3 font-semibold">Priority &amp; schedule</h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">
-            Staff priority (1 = highest, currently {currentPriority ?? "not set"})
-          </label>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-9 w-full rounded-md border px-2 text-sm">
-            <option value="">Not set</option>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-          {needsPriorityReason && (
-            <input
-              value={priorityReason}
-              onChange={(e) => setPriorityReason(e.target.value)}
-              placeholder="Why are you raising this request's priority?"
-              className="h-9 w-full rounded-md border px-2 text-sm"
-            />
-          )}
-          {priorityError && <p className="text-xs text-destructive">{priorityError}</p>}
-          <Button size="sm" onClick={handleSavePriority} disabled={priorityBusy}>
-            {priorityBusy ? "Saving…" : "Save priority"}
-          </Button>
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-atb-navy">
+          Staff priority <span className="font-normal text-zinc-500">(1 = most urgent)</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Staff priority">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              disabled={disabled}
+              aria-pressed={priority === n}
+              onClick={() => {
+                setPriority(n);
+                setPriorityError(null);
+              }}
+              className={`${segment(priority === n)} w-10 disabled:opacity-50`}
+            >
+              {n}
+            </button>
+          ))}
         </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">
-            Bucket (currently {currentBucket ?? "not scheduled"})
-          </label>
-          <select value={bucket} onChange={(e) => setBucketValue(e.target.value)} className="h-9 w-full rounded-md border px-2 text-sm">
-            <option value="">Choose a bucket…</option>
-            {BUCKET_OPTIONS.map((b) => (
-              <option key={b.value} value={b.value}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-          {needsBucketReason && (
-            <input
-              value={bucketReason}
-              onChange={(e) => setBucketReason(e.target.value)}
-              placeholder="Why is this moving to This month?"
-              className="h-9 w-full rounded-md border px-2 text-sm"
-            />
-          )}
-          {bucketError && <p className="text-xs text-destructive">{bucketError}</p>}
-          <Button size="sm" onClick={handleSaveBucket} disabled={bucketBusy}>
-            {bucketBusy ? "Saving…" : "Save bucket"}
-          </Button>
-        </div>
+        {priorityChanged && (
+          <div className="space-y-2">
+            {needsPriorityReason && (
+              <input
+                value={priorityReason}
+                onChange={(e) => setPriorityReason(e.target.value)}
+                placeholder="Why is this more urgent now? (required)"
+                className="h-9 w-full rounded-md border border-input px-2 text-sm"
+              />
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSavePriority} disabled={priorityBusy}>
+                {priorityBusy ? "Saving…" : `Set priority ${priority}`}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPriority(currentPriority)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+        {priorityError && <p className="text-xs text-destructive">{priorityError}</p>}
       </div>
-    </section>
+
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-atb-navy">Plan for</p>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Plan for">
+          {BUCKET_OPTIONS.map((b) => (
+            <button
+              key={b.value}
+              type="button"
+              disabled={disabled}
+              aria-pressed={bucket === b.value}
+              onClick={() => {
+                setBucketValue(b.value);
+                setBucketError(null);
+              }}
+              className={`${segment(bucket === b.value)} disabled:opacity-50`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+        {bucketChanged && (
+          <div className="space-y-2">
+            {needsBucketReason && (
+              <input
+                value={bucketReason}
+                onChange={(e) => setBucketReason(e.target.value)}
+                placeholder="Why does this need to happen this month? (required)"
+                className="h-9 w-full rounded-md border border-input px-2 text-sm"
+              />
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSaveBucket} disabled={bucketBusy}>
+                {bucketBusy ? "Saving…" : "Save plan"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setBucketValue(currentBucket)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+        {bucketError && <p className="text-xs text-destructive">{bucketError}</p>}
+      </div>
+    </div>
   );
 }

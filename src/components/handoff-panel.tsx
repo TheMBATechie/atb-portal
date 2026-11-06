@@ -50,9 +50,9 @@ export function HandoffPanel({
   if (readyDevices.length === 0 && notReadyCount === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-lg border bg-white p-4">
+    <section className="space-y-3 rounded-xl border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Hand over to partner</h2>
+        <h2 className="text-lg text-atb-navy">Hand over to partner</h2>
         <Link href={`/volunteer/picklist/${requestCode}`} className="text-sm text-atb-green hover:underline">
           Open pick list &rarr;
         </Link>

@@ -27,6 +27,7 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
 
   let notFound = false;
   let request: { code: string; status: string; bucket: string | null } | null = null;
+  let staffMessage: string | null = null;
   let lines: RequestLine[] = [];
   let feedback: Feedback[] = [];
 
@@ -34,7 +35,7 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("requests")
-      .select("id, code, status, bucket")
+      .select("id, code, status, bucket, decline_message")
       .eq("code", code.toUpperCase())
       .ilike("contact_email", email)
       .maybeSingle();
@@ -43,6 +44,20 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
       notFound = true;
     } else {
       request = { code: data.code, status: data.status, bucket: data.bucket };
+      if (data.status === "declined") staffMessage = data.decline_message;
+      if (data.status === "needs_info") {
+        // The latest "ask for more info" message staff sent.
+        const { data: ask } = await supabase
+          .from("decision_log")
+          .select("reason")
+          .eq("request_id", data.id)
+          .eq("action", "set_status")
+          .eq("to_value", "needs_info")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        staffMessage = ask?.reason ?? null;
+      }
       const { data: lineRows } = await supabase
         .from("request_lines")
         .select("device_category, quantity, os_pref, os_firm")
@@ -110,6 +125,15 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
             <p className="text-xs font-medium text-muted-foreground">{request.code}</p>
             <h2 className="text-lg font-semibold">{requestStatusLabel(request.status, request.bucket)}</h2>
           </div>
+          {staffMessage && (
+            <div className="rounded-md bg-atb-cream p-3 text-sm">
+              <p className="mb-1 font-semibold text-atb-navy">Message from Atlanta Tech Bank</p>
+              <p className="whitespace-pre-line">{staffMessage}</p>
+              {request.status === "needs_info" && (
+                <p className="mt-2 text-xs text-zinc-600">Please send this information to the ATB team and mention your request code, {request.code}.</p>
+              )}
+            </div>
+          )}
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">Devices requested</p>
             <ul className="space-y-1 text-sm">

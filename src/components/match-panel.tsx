@@ -54,9 +54,9 @@ export function MatchPanel({
   canEdit: boolean;
 }) {
   return (
-    <section className="space-y-4 rounded-lg border bg-white p-4">
+    <section className="space-y-4 rounded-xl border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Match devices</h2>
+        <h2 className="text-lg text-atb-navy">Match devices</h2>
         <span className="flex flex-wrap gap-3 text-sm text-muted-foreground">
           <Link href={holdsToggleHref} scroll={false} className="hover:underline">
             {includeHolds ? "Hide devices on hold" : "Show devices on hold"}

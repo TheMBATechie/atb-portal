@@ -65,6 +65,13 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
   - "Other" purpose / needs and a specific setup require a description. Other needs are saved to `request_lines.notes`.
   - The need-by date is now optional ("No fixed date" → `needed_by` null) and can't be in the past. The same device type can't be added twice.
   - Errors show inline under each field and the page scrolls to the first. `submitRequest` re-checks all of these rules on the server.
+- Post-Stage 9: staff request page redesigned.
+  - Header: code, a status label, fact chips (needs, need-by with days left, urgency, priority, plan) and a progress bar (Received → Planned → Matched → Ready → Delivered).
+  - A "Next step" box says what to do based on status. The failed-QA / reallocation replacement warning moved into it.
+  - Main column: Match devices, Hand over, Decision log (latest 6, then "Show all").
+  - Sidebar: Plan (priority 1–5 and month as buttons, suggested score folded away), Request details, Partner summary (no more 60-row device list), Feedback, and "Decline or ask for more info" collapsed. Match, Plan and Decline are hidden once a request is delivered, declined or closed. The staff layout is widened to max-w-6xl.
+- Post-Stage 9: declining a request now releases its reserved devices (`release_devices`, reason "Request declined"). `/status` now shows the partner the staff message for declined requests, and the latest "ask for more info" message for needs_info requests.
+- Post-Stage 9: added `await connection()` to the staff and volunteer layouts (they read the signed-in user). This fixes the dev "Date.now() while prerendering" error on staff pages.
 - Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
 - Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
 - Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { requireSignedIn } from "@/lib/auth";
 import { SiteSwitcher } from "@/components/site-switcher";
 import { getSelectedSite, listSites } from "@/lib/site";
@@ -6,6 +7,7 @@ import { getSelectedSite, listSites } from "@/lib/site";
 export const instant = false;
 
 export default async function VolunteerLayout({ children }: LayoutProps<"/volunteer">) {
+  await connection(); // per-request: checks the signed-in user
   const profile = await requireSignedIn();
   const [sites, selectedSite] = await Promise.all([listSites(), getSelectedSite()]);
 

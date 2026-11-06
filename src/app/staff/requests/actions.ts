@@ -133,6 +133,17 @@ export async function declineRequest(input: { requestId: string; message: string
     reason: message,
   });
 
+  // A declined request shouldn't keep devices locked up: release anything set aside.
+  const { data: held } = await admin.from("devices").select("id").eq("reserved_request_id", input.requestId);
+  if (held?.length) {
+    await admin.rpc("release_devices", {
+      p_request_id: input.requestId,
+      p_device_ids: held.map((d) => d.id),
+      p_actor: profile.displayName,
+      p_reason: "Request declined",
+    });
+  }
+
   return { ok: true };
 }
 
