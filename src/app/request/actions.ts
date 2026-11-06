@@ -31,6 +31,7 @@ export type SubmitRequestInput = {
   allowSubstitutes: boolean;
   setup: Setup;
   setupNotes: string;
+  rawText?: string; // the free text or pasted email the AI read, if any
 };
 
 export type SubmitRequestResult = { ok: true; code: string } | { ok: false; message: string };
@@ -119,6 +120,7 @@ export async function submitRequest(input: SubmitRequestInput): Promise<SubmitRe
       allow_substitutes: input.allowSubstitutes,
       setup: input.setup,
       setup_notes: input.setupNotes.trim() || null,
+      raw_text: input.rawText?.trim().slice(0, 10000) || null,
     })
     .select("id, code")
     .single();

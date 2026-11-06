@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import {
   NEEDS_OPTIONS,
@@ -65,6 +66,7 @@ export default async function StaffRequestDetailPage({
   params,
   searchParams,
 }: PageProps<"/staff/requests/[code]">) {
+  await connection(); // always render per request (uses today's date)
   const { code } = await params;
   const sp = await searchParams;
   const includeHolds = sp.holds === "1";

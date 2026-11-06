@@ -100,12 +100,20 @@ export default async function StaffRequestsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
         <h1 className="text-2xl font-bold">Planning board</h1>
         <p className="text-sm text-muted-foreground">
           {requests.length} request{requests.length === 1 ? "" : "s"}. Suggested score is a hint only — it is
           never applied automatically.
         </p>
+        </div>
+        <Link
+          href="/staff/requests/new"
+          className="rounded-md border bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:border-zinc-400"
+        >
+          New request from an email
+        </Link>
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">

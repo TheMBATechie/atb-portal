@@ -72,9 +72,41 @@ function Chip({
 const fieldClass = "h-9 w-full rounded-md border px-2 text-sm";
 const labelRow = "flex items-center gap-2";
 
-export function RequestForm({ partners }: { partners: Partner[] }) {
+// Shape returned by /api/ai/parse-request (validated with zod on the server).
+type AiFields = {
+  org_name?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  purpose?: Purpose | null;
+  purpose_detail?: string | null;
+  use_type?: UseType | null;
+  people_served?: number | null;
+  lines?: { device_category: RequestLineCategory; quantity: number }[] | null;
+  os_pref?: OsPref | null;
+  os_firm?: boolean | null;
+  needs?: Need[] | null;
+  needed_by?: string | null;
+  late_impact?: string | null;
+  partner_urgency?: Urgency | null;
+  urgency_reason?: string | null;
+  allow_partial?: boolean | null;
+  allow_substitutes?: boolean | null;
+  setup?: Setup | null;
+  setup_notes?: string | null;
+};
+
+type SectionKey = "org" | "purpose" | "use" | "lines" | "os" | "needs" | "when" | "urgency" | "flex" | "setup";
+
+const AI_FALLBACK_NOTE = "Automatic fill isn't available right now. Please fill in the form below.";
+
+export function RequestForm({ partners, mode = "partner" }: { partners: Partner[]; mode?: "partner" | "staff" }) {
   const router = useRouter();
   const lineCounter = useRef(1);
+
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiFilled, setAiFilled] = useState<Set<SectionKey>>(new Set());
 
   const [partnerId, setPartnerId] = useState("");
   const [isOtherOrg, setIsOtherOrg] = useState(false);
@@ -148,6 +180,136 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
   }
 
+  function sectionClass(key: SectionKey, spacing = "space-y-3") {
+    const highlight = aiFilled.has(key) ? " border-violet-400 ring-2 ring-violet-200" : "";
+    return `${spacing} rounded-lg border bg-white p-4${highlight}`;
+  }
+
+  function applyAiFields(f: AiFields): Set<SectionKey> {
+    const filled = new Set<SectionKey>();
+    if (f.org_name) {
+      const name = f.org_name.trim().toLowerCase();
+      const match =
+        partners.find((p) => p.name.toLowerCase() === name) ??
+        partners.find((p) => p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase()));
+      if (match) {
+        setIsOtherOrg(false);
+        setPartnerId(match.id);
+      } else {
+        setIsOtherOrg(true);
+        setPartnerId("");
+        setNewOrgName(f.org_name.trim());
+      }
+      filled.add("org");
+    }
+    if (f.contact_name) {
+      setContactName(f.contact_name);
+      filled.add("org");
+    }
+    if (f.contact_email) {
+      setContactEmail(f.contact_email);
+      filled.add("org");
+    }
+    if (f.purpose) {
+      setPurpose(f.purpose);
+      filled.add("purpose");
+    }
+    if (f.purpose_detail) {
+      setPurposeDetail(f.purpose_detail);
+      filled.add("purpose");
+    }
+    if (f.use_type) {
+      setUseType(f.use_type);
+      filled.add("use");
+    }
+    if (f.people_served != null) {
+      setPeopleServed(String(f.people_served));
+      filled.add("use");
+    }
+    if (f.lines?.length) {
+      setLines(
+        f.lines.map((l) => {
+          lineCounter.current += 1;
+          return { id: `line-${lineCounter.current}`, category: l.device_category, quantity: l.quantity };
+        })
+      );
+      filled.add("lines");
+    }
+    if (f.os_pref) {
+      setOsPref(f.os_pref);
+      filled.add("os");
+    }
+    if (f.os_firm != null) {
+      setOsFirm(f.os_firm);
+      filled.add("os");
+    }
+    if (f.needs?.length) {
+      setNeeds(f.needs);
+      filled.add("needs");
+    }
+    if (f.needed_by) {
+      setNeededBy(f.needed_by);
+      filled.add("when");
+    }
+    if (f.late_impact) {
+      setLateImpact(f.late_impact);
+      filled.add("when");
+    }
+    if (f.partner_urgency) {
+      setPartnerUrgency(f.partner_urgency);
+      filled.add("urgency");
+    }
+    if (f.urgency_reason && f.partner_urgency) {
+      setUrgencyReason(f.urgency_reason);
+      filled.add("urgency");
+    }
+    if (f.allow_partial != null) {
+      setAllowPartial(f.allow_partial);
+      filled.add("flex");
+    }
+    if (f.allow_substitutes != null) {
+      setAllowSubstitutes(f.allow_substitutes);
+      filled.add("flex");
+    }
+    if (f.setup) {
+      setSetup(f.setup);
+      filled.add("setup");
+    }
+    if (f.setup_notes) {
+      setSetupNotes(f.setup_notes);
+      filled.add("setup");
+    }
+    return filled;
+  }
+
+  async function handleAiFill() {
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const res = await fetch("/api/ai/parse-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: aiText }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setAiNote(data.message ?? AI_FALLBACK_NOTE);
+        return;
+      }
+      const filled = applyAiFields(data.fields as AiFields);
+      setAiFilled(filled);
+      setAiNote(
+        filled.size
+          ? "We filled in the highlighted sections. Please check them and fill in anything missing."
+          : "We couldn't find details to fill in. Please fill in the form below."
+      );
+    } catch {
+      setAiNote(AI_FALLBACK_NOTE);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   function toggleNeed(value: Need) {
     setNeeds((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
   }
@@ -197,6 +359,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
       allowSubstitutes,
       setup,
       setupNotes,
+      rawText: aiFilled.size ? aiText : undefined,
     };
 
     setSubmitting(true);
@@ -208,12 +371,46 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
       setErrorMessage(result.message);
       return;
     }
-    router.push(`/request/submitted?code=${encodeURIComponent(result.code)}`);
+    router.push(
+      mode === "staff"
+        ? `/staff/requests/${encodeURIComponent(result.code)}`
+        : `/request/submitted?code=${encodeURIComponent(result.code)}`
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/60 p-4">
+        <div className={labelRow}>
+          <h2 className="font-semibold">
+            {mode === "staff" ? "Paste an email" : "Tell us what you need in your own words"}
+          </h2>
+          <span className="text-xs text-muted-foreground">Optional</span>
+        </div>
+        <textarea
+          value={aiText}
+          onChange={(e) => setAiText(e.target.value)}
+          placeholder={
+            mode === "staff"
+              ? "Paste the partner's email here and we'll fill in the form."
+              : "For example: We run a job training program and need 8 laptops by Dec 1 for video interviews."
+          }
+          className="min-h-28 w-full rounded-md border bg-white px-2 py-1.5 text-sm"
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={aiBusy || aiText.trim().length < 10}
+            onClick={handleAiFill}
+          >
+            {aiBusy ? "Reading…" : "Fill the form for me"}
+          </Button>
+          {aiNote && <p className="text-sm text-zinc-700">{aiNote}</p>}
+        </div>
+      </section>
+
+      <section className={sectionClass("org")}>
         <div className={labelRow}>
           <h2 className="font-semibold">Which organization are you with?</h2>
           <Tag tag="must" />
@@ -268,7 +465,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("purpose")}>
         <div className={labelRow}>
           <h2 className="font-semibold">What will people use these for?</h2>
           <Tag tag="must" />
@@ -288,7 +485,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         />
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("use")}>
         <div className={labelRow}>
           <h2 className="font-semibold">Shared, or one per person? How many people will they serve?</h2>
           <Tag tag="nice" />
@@ -310,7 +507,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         />
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("lines")}>
         <div className={labelRow}>
           <h2 className="font-semibold">What kind of device, and how many?</h2>
           <Tag tag="must" />
@@ -356,7 +553,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         </Button>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("os")}>
         <div className={labelRow}>
           <h2 className="font-semibold">Windows, Mac, or doesn&apos;t matter?</h2>
           <Tag tag={osFirm ? "must" : "nice"} />
@@ -390,7 +587,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         )}
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("needs")}>
         <div className={labelRow}>
           <h2 className="font-semibold">Anything specific the devices need?</h2>
           <Tag tag="nice" />
@@ -404,7 +601,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("when")}>
         <div className={labelRow}>
           <h2 className="font-semibold">When do you need them? What happens if they arrive later?</h2>
           <Tag tag="must" />
@@ -423,7 +620,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         />
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("urgency")}>
         <div className={labelRow}>
           <h2 className="font-semibold">How urgent is this for you?</h2>
           <Tag tag="nice" />
@@ -449,7 +646,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         )}
       </section>
 
-      <section className="space-y-4 rounded-lg border bg-white p-4">
+      <section className={sectionClass("flex", "space-y-4")}>
         <div>
           <div className={labelRow}>
             <h2 className="font-semibold">Send what&apos;s ready now, or all together?</h2>
@@ -480,7 +677,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border bg-white p-4">
+      <section className={sectionClass("setup")}>
         <div className={labelRow}>
           <h2 className="font-semibold">Setup</h2>
           <Tag tag="nice" />
@@ -509,7 +706,7 @@ export function RequestForm({ partners }: { partners: Partner[] }) {
       )}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full sm:w-auto">
-        {submitting ? "Submitting…" : "Submit request"}
+        {submitting ? "Submitting…" : mode === "staff" ? "Create request" : "Submit request"}
       </Button>
     </form>
   );
