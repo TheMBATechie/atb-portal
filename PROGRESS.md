@@ -15,7 +15,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 | 4 | Matching + reservation (core) | done |
 | 5 | Volunteer queue + pick list + fulfill | done |
 | 6 | AI intake | done |
-| 7 | Partner history, feedback, impact | todo |
+| 7 | Partner history, feedback, impact | built + committed, user testing deferred to end |
 | 8 | Nice-to-haves | todo |
 | 9 | Polish | todo |
 
@@ -46,6 +46,10 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 6: Gemini is called with plain `fetch` (no SDK) from `src/lib/ai-intake.ts`, with structured JSON output, checked with zod (approved by the user). If `GEMINI_MODEL` returns 503/429/404 or times out (10s), it tries `gemini-3.5-flash`, then `gemini-3.5-flash-lite`. On Nov 5 evening `gemini-3.8-flash` was often overloaded (503). With no key or every model failing, the form shows a one-line note and works as normal.
 - Stage 6: AI-filled sections get a violet highlight. The text the AI read is saved to `requests.raw_text`. Staff "Paste an email" is at `/staff/requests/new` (linked from the planning board) and opens the new request after creating it.
 - Stage 6: added `await connection()` to `/staff/requests/[code]` to fix a dev-time "Date.now() while prerendering" error.
+- Stage 7: Gemini calls are shared in `src/lib/gemini.ts` (`generateWithGemini`, same fallback models), used by AI intake and the thank-you draft.
+- Stage 7: "devices received" by a partner = Deployed devices where `deployment_partner` = partner name, the same column the sheet uses. Added a simple `/staff/partners` index (not in PLAN.md) so the partner pages can be reached from the nav.
+- Stage 7: partner feedback on `/status` is only open for delivered / partially delivered / closed requests, and re-checks code + email on the server. Once a partner has left feedback, the page shows it instead of the form.
+- Stage 7: the thank-you draft sends Gemini only aggregate facts (counts, partner names, categories, months), never recipient names. Without AI it falls back to a template letter. There's no donor email in the schema, so "Open in email" leaves the To line blank.
 - Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
 - Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
 - Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.

@@ -19,6 +19,8 @@ import { MatchPanel, type PanelDevice, type PanelLine, type PanelReserved } from
 import { matchLine, type Candidate, type MatchDevice, type MatchLine } from "@/lib/matching";
 import { loadMatchableDevices } from "@/lib/match-data";
 import { HandoffPanel } from "@/components/handoff-panel";
+import { FeedbackList } from "@/components/feedback-form";
+import { StaffFeedback } from "@/components/staff-feedback";
 
 const GROUP_TITLES = [
   { key: "ready", title: "Ready For Deployment" },
@@ -112,6 +114,13 @@ export default async function StaffRequestDetailPage({
     loadMatchableDevices(),
     supabase.from("devices").select("id, reserved_line_id").eq("reserved_request_id", request.id),
   ]);
+
+  const { data: feedbackRows } = await supabase
+    .from("request_feedback")
+    .select("id, source, rating, body, created_at")
+    .eq("request_id", request.id)
+    .order("created_at", { ascending: false });
+  const feedback = feedbackRows ?? [];
 
   const lines = linesRes.data ?? [];
   const decisionLog = logRes.data ?? [];
@@ -209,7 +218,15 @@ export default async function StaffRequestDetailPage({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="font-mono text-sm text-muted-foreground">{request.code}</p>
-          <h1 className="text-2xl font-bold">{request.org_name}</h1>
+          <h1 className="text-2xl font-bold">
+            {request.partner_id ? (
+              <Link href={`/staff/partners/${request.partner_id}`} className="hover:underline">
+                {request.org_name}
+              </Link>
+            ) : (
+              request.org_name
+            )}
+          </h1>
           <p className="text-sm text-muted-foreground">{requestStatusLabel(request.status, request.bucket)}</p>
         </div>
         <Link href="/staff/requests" className="text-sm text-muted-foreground hover:underline">
@@ -385,6 +402,14 @@ export default async function StaffRequestDetailPage({
           .map((d) => ({ id: d.id, label: d.label, location: d.location }))}
         notReadyCount={panelReserved.filter((d) => d.status !== "Ready For Deployment").length}
       />
+
+      <section className="space-y-4 rounded-lg border bg-white p-4">
+        <h2 className="font-semibold">Feedback</h2>
+        <FeedbackList items={feedback} />
+        <div className="border-t pt-4">
+          <StaffFeedback requestId={request.id} />
+        </div>
+      </section>
 
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-3 font-semibold">Decision log</h2>

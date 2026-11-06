@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { REQUEST_LINE_CATEGORIES, requestStatusLabel } from "@/lib/requests";
+import { FeedbackList } from "@/components/feedback-form";
+import { PartnerFeedback } from "@/components/partner-feedback";
+
+const FEEDBACK_STATUSES = ["delivered", "partially_delivered", "closed"];
+type Feedback = { id: number; source: string; rating: number | null; body: string; created_at: string };
 
 export const instant = false;
 
@@ -23,6 +28,7 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
   let notFound = false;
   let request: { code: string; status: string; bucket: string | null } | null = null;
   let lines: RequestLine[] = [];
+  let feedback: Feedback[] = [];
 
   if (hasQuery) {
     const supabase = createAdminClient();
@@ -42,6 +48,15 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
         .select("device_category, quantity, os_pref, os_firm")
         .eq("request_id", data.id);
       lines = lineRows ?? [];
+      if (FEEDBACK_STATUSES.includes(data.status)) {
+        const { data: fb } = await supabase
+          .from("request_feedback")
+          .select("id, source, rating, body, created_at")
+          .eq("request_id", data.id)
+          .eq("source", "partner")
+          .order("created_at", { ascending: false });
+        feedback = fb ?? [];
+      }
     }
   }
 
@@ -113,6 +128,20 @@ export default async function StatusPage({ searchParams }: PageProps<"/status">)
             </ul>
           </div>
           {/* No estimated date yet (Stage 4+ builds matching/estimation). Omitted, not faked. */}
+        </div>
+      )}
+
+      {request && FEEDBACK_STATUSES.includes(request.status) && (
+        <div className="mt-6 space-y-3 rounded-lg border bg-white p-4">
+          <h2 className="font-semibold">Your feedback</h2>
+          {feedback.length > 0 ? (
+            <>
+              <FeedbackList items={feedback} />
+              <p className="text-sm text-muted-foreground">Thank you for letting us know how it&apos;s going.</p>
+            </>
+          ) : (
+            <PartnerFeedback code={request.code} email={email} />
+          )}
         </div>
       )}
     </div>

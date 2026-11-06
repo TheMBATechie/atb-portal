@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { generateWithGemini } from "@/lib/gemini";
 import {
   NEEDS_OPTIONS,
   OS_PREF_OPTIONS,
@@ -115,59 +116,13 @@ export type ParseResult = { ok: true; fields: ParsedRequest } | { ok: false; mes
 
 export const AI_UNAVAILABLE = "Automatic fill isn't available right now. Please fill in the form below.";
 
-// Tried in order when GEMINI_MODEL is busy (503/429), missing, or slow.
-// Free-tier models get overloaded at peak times; this keeps the demo working.
-const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"];
-
-type Attempt = { ok: true; raw: string } | { ok: false; retryable: boolean };
-
-async function callGemini(model: string, apiKey: string, text: string, today: string): Promise<Attempt> {
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt(text, today) }] }],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseSchema: RESPONSE_SCHEMA,
-          },
-        }),
-        signal: AbortSignal.timeout(10000),
-      }
-    );
-    if (!res.ok) {
-      console.error("Gemini call failed", model, res.status, (await res.text()).slice(0, 300));
-      return { ok: false, retryable: res.status === 503 || res.status === 429 || res.status === 500 || res.status === 404 };
-    }
-    const body = await res.json();
-    const raw: string | undefined = body?.candidates?.[0]?.content?.parts?.[0]?.text;
-    return raw ? { ok: true, raw } : { ok: false, retryable: true };
-  } catch (error) {
-    console.error("Gemini call error", model, error);
-    return { ok: false, retryable: true };
-  }
-}
-
 export async function parseRequestText(text: string): Promise<ParseResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
-  if (!apiKey || !model) return { ok: false, message: AI_UNAVAILABLE };
-
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-
-  let attempt: Attempt = { ok: false, retryable: true };
-  for (const m of [model, ...FALLBACK_MODELS.filter((f) => f !== model)]) {
-    attempt = await callGemini(m, apiKey, text, today);
-    if (attempt.ok || !attempt.retryable) break;
-  }
-  if (!attempt.ok) return { ok: false, message: AI_UNAVAILABLE };
+  const result = await generateWithGemini({ prompt: prompt(text, today), responseSchema: RESPONSE_SCHEMA });
+  if (!result.ok) return { ok: false, message: AI_UNAVAILABLE };
 
   try {
-    const parsed = ParsedRequestSchema.safeParse(JSON.parse(attempt.raw));
+    const parsed = ParsedRequestSchema.safeParse(JSON.parse(result.text));
     if (!parsed.success) {
       console.error("Gemini reply failed validation", parsed.error.issues.slice(0, 5));
       return { ok: false, message: AI_UNAVAILABLE };

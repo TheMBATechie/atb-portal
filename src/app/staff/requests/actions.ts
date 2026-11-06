@@ -373,3 +373,34 @@ export async function setAllowSubstitutes(input: {
   });
   return { ok: true };
 }
+
+// Stage 7: staff log feedback they heard from a partner (call, visit, email).
+export async function logStaffFeedback(input: {
+  requestId: string;
+  rating: number | null;
+  body: string;
+}): Promise<ActionResult> {
+  const profile = await requireStaffActor();
+  if (!profile) return { ok: false, message: NOT_STAFF_ERROR };
+  const body = input.body.trim().slice(0, 2000);
+  if (!body) return { ok: false, message: "Write a short note." };
+  if (input.rating !== null && (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5)) {
+    return { ok: false, message: "Rating must be 1 to 5." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("request_feedback")
+    .insert({ request_id: input.requestId, source: "staff", rating: input.rating, body });
+  if (error) return { ok: false, message: GENERIC_ERROR };
+
+  await logDecision({
+    requestId: input.requestId,
+    actor: profile.displayName,
+    action: "note",
+    fromValue: null,
+    toValue: null,
+    detail: "Staff logged feedback",
+  });
+  return { ok: true };
+}
