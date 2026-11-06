@@ -4,7 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { releaseDevices, reserveDevices, setAllowSubstitutes, swapDevice } from "@/app/staff/requests/actions";
+import {
+  reallocateDevices,
+  releaseDevices,
+  reserveDevices,
+  setAllowSubstitutes,
+  swapDevice,
+} from "@/app/staff/requests/actions";
 
 export type PanelDevice = {
   id: string;
@@ -115,6 +121,31 @@ function LineMatcher({ requestId, line, canEdit }: { requestId: string; line: Pa
   const [selected, setSelected] = useState<Set<string>>(new Set(line.preselected));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [moveReason, setMoveReason] = useState("");
+
+  const heldIds = new Set(
+    line.groups.flatMap((g) => g.devices).filter((d) => d.flags.some((f) => f.startsWith("Held by"))).map((d) => d.id)
+  );
+  const selectedHeld = [...selected].filter((id) => heldIds.has(id));
+
+  async function handleReallocate() {
+    setBusy(true);
+    setError(null);
+    const result = await reallocateDevices({
+      toRequestId: requestId,
+      toLineId: line.lineId,
+      deviceIds: selectedHeld,
+      reason: moveReason,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setSelected(new Set());
+    setMoveReason("");
+    router.refresh();
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -186,6 +217,27 @@ function LineMatcher({ requestId, line, canEdit }: { requestId: string; line: Pa
           <span className="text-xs text-muted-foreground">
             {line.stillNeeded > 0 ? `${line.stillNeeded} still needed for this line.` : "This line is fully covered."}
           </span>
+        </div>
+      )}
+      {canEdit && selectedHeld.length > 0 && (
+        <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm">
+          <p>
+            {selectedHeld.length} ticked device{selectedHeld.length === 1 ? " is" : "s are"} set aside for another
+            request. <strong>Reserve</strong> will be blocked. If this request is more urgent, move{" "}
+            {selectedHeld.length === 1 ? "it" : "them"} here instead. The other request will be told to pick a
+            replacement.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={moveReason}
+              onChange={(e) => setMoveReason(e.target.value)}
+              placeholder="Why is this more urgent? (required)"
+              className="h-8 min-w-0 flex-1 rounded-md border bg-white px-2 text-sm"
+            />
+            <Button size="sm" variant="destructive" disabled={busy} onClick={handleReallocate}>
+              {busy ? "Moving…" : `Move ${selectedHeld.length} to this request`}
+            </Button>
+          </div>
         </div>
       )}
     </div>

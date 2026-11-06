@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { REQUEST_LINE_CATEGORIES, URGENCY_OPTIONS } from "@/lib/requests";
 import { suggestedPriorityScore } from "@/lib/priority-score";
+import { getSelectedSite } from "@/lib/site";
 
 export const instant = false;
 
@@ -46,13 +47,16 @@ const COLUMN_DEFS = [
 
 export default async function StaffRequestsPage() {
   const supabase = createAdminClient();
+  const site = await getSelectedSite();
 
-  const { data: requestsData, error: requestsError } = await supabase
+  let requestsQuery = supabase
     .from("requests")
     .select(
       "id, code, org_name, status, bucket, staff_priority, partner_urgency, people_served, created_at, needed_by"
     )
     .order("created_at", { ascending: true });
+  if (site) requestsQuery = requestsQuery.eq("site_id", site);
+  const { data: requestsData, error: requestsError } = await requestsQuery;
 
   if (requestsError) {
     return (

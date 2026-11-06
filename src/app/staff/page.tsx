@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { DEVICE_STATUSES, isDeviceCategory } from "@/lib/devices";
+import { getSelectedSite } from "@/lib/site";
 
 export const instant = false;
 
@@ -33,11 +34,15 @@ const REQUEST_STATUS_ORDER = [
 
 export default async function StaffOverviewPage() {
   const supabase = createAdminClient();
+  const site = await getSelectedSite();
+  let devicesQuery = supabase.from("devices").select("status, device_category, reserved_request_id, import_flags");
+  let requestsQuery = supabase.from("requests").select("status");
+  if (site) {
+    devicesQuery = devicesQuery.eq("site_id", site);
+    requestsQuery = requestsQuery.eq("site_id", site);
+  }
 
-  const [devicesRes, requestsRes] = await Promise.all([
-    supabase.from("devices").select("status, device_category, reserved_request_id, import_flags"),
-    supabase.from("requests").select("status"),
-  ]);
+  const [devicesRes, requestsRes] = await Promise.all([devicesQuery, requestsQuery]);
 
   if (devicesRes.error || requestsRes.error) {
     return (

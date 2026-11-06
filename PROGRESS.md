@@ -16,7 +16,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 | 5 | Volunteer queue + pick list + fulfill | done |
 | 6 | AI intake | done |
 | 7 | Partner history, feedback, impact | built + committed, user testing deferred to end |
-| 8 | Nice-to-haves | todo |
+| 8 | Nice-to-haves | built + committed, user testing deferred to end |
 | 9 | Polish | todo |
 
 ## Skipped or known issues
@@ -50,6 +50,10 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 7: "devices received" by a partner = Deployed devices where `deployment_partner` = partner name, the same column the sheet uses. Added a simple `/staff/partners` index (not in PLAN.md) so the partner pages can be reached from the nav.
 - Stage 7: partner feedback on `/status` is only open for delivered / partially delivered / closed requests, and re-checks code + email on the server. Once a partner has left feedback, the page shows it instead of the form.
 - Stage 7: the thank-you draft sends Gemini only aggregate facts (counts, partner names, categories, months), never recipient names. Without AI it falls back to a template letter. There's no donor email in the schema, so "Open in email" leaves the To line blank.
+- Stage 8: urgent reallocation is on the match panel. With "Show devices held by other requests" on, ticking a held device shows a red box: give a reason, then "Move N to this request". It releases from the source request(s) (`release_devices`), reserves for this one (`reserve_devices`), and puts the devices back if that fails. It logs `reallocate` on both requests, adds a "Needs a replacement" note to the source (its amber banner shows) and re-syncs both statuses.
+- Stage 8: site switcher (staff + volunteer nav) stores `atb_site` in a cookie. It filters the overview, inventory, planning board and volunteer queue. Matching always uses the request's own `site_id`. The seed has one site (`atl`), so with nothing chosen it shows "All sites".
+- Stage 8: the pick list was already sorted by shelf location (Stage 5).
+- Stage 8: fixed device-ID parsing in friendly error messages. IDs also look like `ATB-iPad-25-5438` / `ATB-26-5321-B`, and those weren't named in the double-booking / handoff errors before.
 - Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
 - Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
 - Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.

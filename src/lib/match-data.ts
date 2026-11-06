@@ -6,12 +6,14 @@ import type { MatchDevice } from "@/lib/matching";
 export const MATCH_DEVICE_COLUMNS =
   "id, device_type, device_category, device_model, source_org, status, grade_letter, readiness_rank, reuse_cleared, age_band, win11_ready, mac_ready, flex_ready, location, reserved_request_id";
 
-export async function loadMatchableDevices(): Promise<MatchDevice[]> {
+export async function loadMatchableDevices(siteId: string | null = null): Promise<MatchDevice[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("devices")
     .select(MATCH_DEVICE_COLUMNS)
     .not("status", "in", '("Deployed","Not Suitable / Recycling","Internal Use - ATB")');
+  if (siteId) query = query.eq("site_id", siteId);
+  const { data, error } = await query;
   if (error) throw new Error(`Could not load devices: ${error.message}`);
   return (data ?? []) as MatchDevice[];
 }

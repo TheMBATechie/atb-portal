@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { DeviceIdTag } from "@/components/device-id-tag";
 import { DeviceAdvanceButton } from "@/components/device-advance-button";
+import { getSelectedSite } from "@/lib/site";
 
 export const instant = false;
 
@@ -63,15 +64,19 @@ export default async function VolunteerQueuePage({ searchParams }: PageProps<"/v
   const supabase = createAdminClient();
   const columns = "id, device_type, device_model, status, grade_letter, location, reserved_request_id";
 
-  const [reservedRes, backlogRes] = await Promise.all([
-    supabase.from("devices").select(columns).in("status", [...ZONES]).not("reserved_request_id", "is", null),
-    supabase
-      .from("devices")
-      .select(columns)
-      .in("status", [...BACKLOG_ZONES])
-      .is("reserved_request_id", null)
-      .order("id"),
-  ]);
+  const site = await getSelectedSite();
+  let reservedQuery = supabase.from("devices").select(columns).in("status", [...ZONES]).not("reserved_request_id", "is", null);
+  let backlogQuery = supabase
+    .from("devices")
+    .select(columns)
+    .in("status", [...BACKLOG_ZONES])
+    .is("reserved_request_id", null)
+    .order("id");
+  if (site) {
+    reservedQuery = reservedQuery.eq("site_id", site);
+    backlogQuery = backlogQuery.eq("site_id", site);
+  }
+  const [reservedRes, backlogRes] = await Promise.all([reservedQuery, backlogQuery]);
 
   if (reservedRes.error || backlogRes.error) {
     return (

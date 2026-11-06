@@ -78,7 +78,7 @@ export default async function StaffRequestDetailPage({
   const { data: request, error: requestError } = await supabase
     .from("requests")
     .select(
-      "id, code, partner_id, org_name, contact_name, contact_email, purpose, purpose_detail, use_type, people_served, needed_by, late_impact, partner_urgency, urgency_reason, allow_partial, allow_substitutes, setup, setup_notes, status, bucket, staff_priority, decline_message, created_at"
+      "id, code, site_id, partner_id, org_name, contact_name, contact_email, purpose, purpose_detail, use_type, people_served, needed_by, late_impact, partner_urgency, urgency_reason, allow_partial, allow_substitutes, setup, setup_notes, status, bucket, staff_priority, decline_message, created_at"
     )
     .eq("code", code.toUpperCase())
     .maybeSingle();
@@ -111,7 +111,7 @@ export default async function StaffRequestDetailPage({
       .select("id, actor, action, from_value, to_value, detail, reason, created_at")
       .eq("request_id", request.id)
       .order("created_at", { ascending: false }),
-    loadMatchableDevices(),
+    loadMatchableDevices(request.site_id),
     supabase.from("devices").select("id, reserved_line_id").eq("reserved_request_id", request.id),
   ]);
 

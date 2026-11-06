@@ -8,6 +8,8 @@ export type ActionResult = { ok: true } | { ok: false; message: string };
 
 const GENERIC_ERROR = "Something went wrong saving that change. Please try again.";
 const NOT_STAFF_ERROR = "You need to be signed in as staff to do that.";
+// Device IDs look like ATB-26-5321, ATB-iPad-25-5438 or ATB-26-5321-B.
+const DEVICE_ID_PATTERN = /ATB-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g;
 
 async function requireStaffActor() {
   const profile = await getCurrentProfile();
@@ -141,7 +143,7 @@ export async function declineRequest(input: { requestId: string; message: string
 // Turns database errors into a sentence naming the device and the request holding it.
 async function friendlyReserveError(message: string): Promise<string> {
   const admin = createAdminClient();
-  const listed = (message.split(":").slice(1).join(":").match(/[A-Z]{2,}-\d+-\d+/g) ?? []).slice(0, 5);
+  const listed = (message.split(":").slice(1).join(":").match(DEVICE_ID_PATTERN) ?? []).slice(0, 5);
 
   if (message.includes("DOUBLE_ALLOCATION") && listed.length) {
     const { data: devices } = await admin.from("devices").select("id, reserved_request_id").in("id", listed);
@@ -312,7 +314,7 @@ export async function confirmHandoff(input: { requestId: string; deviceIds: stri
   });
   if (error) {
     if (error.message.includes("NOT_READY")) {
-      const ids = error.message.match(/[A-Z]{2,}-\d+-\d+/g) ?? [];
+      const ids = error.message.match(DEVICE_ID_PATTERN) ?? [];
       return {
         ok: false,
         message: `${ids.join(", ") || "Some devices"} must be Ready For Deployment and set aside for this request before handoff. Nothing was handed over.`,
@@ -402,5 +404,118 @@ export async function logStaffFeedback(input: {
     toValue: null,
     detail: "Staff logged feedback",
   });
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------
+// Stage 8: urgent reallocation — move devices held by request A to request B
+// ---------------------------------------------------------------
+
+export async function reallocateDevices(input: {
+  toRequestId: string;
+  toLineId: string;
+  deviceIds: string[];
+  reason: string;
+}): Promise<ActionResult> {
+  const profile = await requireStaffActor();
+  if (!profile) return { ok: false, message: NOT_STAFF_ERROR };
+  const reason = input.reason.trim();
+  if (!reason) return { ok: false, message: "Tell us why these devices are being moved. Both requests will see it." };
+  if (input.deviceIds.length === 0) return { ok: false, message: "Tick at least one device to move." };
+
+  const admin = createAdminClient();
+  const [{ data: devices }, { data: target }] = await Promise.all([
+    admin.from("devices").select("id, reserved_request_id, reserved_line_id").in("id", input.deviceIds),
+    admin.from("requests").select("id, code").eq("id", input.toRequestId).maybeSingle(),
+  ]);
+  if (!devices || devices.length !== input.deviceIds.length || !target) {
+    return { ok: false, message: "Some of those devices couldn't be found. Reload the page and try again." };
+  }
+
+  // Group by the request currently holding each device.
+  const bySource = new Map<string, { id: string; lineId: string | null }[]>();
+  for (const d of devices) {
+    if (!d.reserved_request_id || d.reserved_request_id === input.toRequestId) continue;
+    const list = bySource.get(d.reserved_request_id) ?? [];
+    list.push({ id: d.id, lineId: d.reserved_line_id });
+    bySource.set(d.reserved_request_id, list);
+  }
+  if (bySource.size === 0) return { ok: false, message: "Those devices aren't held by another request any more. Reload the page." };
+
+  const { data: sources } = await admin.from("requests").select("id, code").in("id", [...bySource.keys()]);
+  const codeOf = new Map((sources ?? []).map((r) => [r.id, r.code]));
+  const moving = [...bySource.values()].flat().map((d) => d.id);
+
+  // 1. release from each source request
+  for (const [sourceId, list] of bySource) {
+    const { error } = await admin.rpc("release_devices", {
+      p_request_id: sourceId,
+      p_device_ids: list.map((d) => d.id),
+      p_actor: profile.displayName,
+      p_reason: `Reallocated to ${target.code}: ${reason}`,
+    });
+    if (error) return { ok: false, message: GENERIC_ERROR };
+  }
+
+  // 2. reserve for the target request; on failure put everything back
+  const { error: reserveError } = await admin.rpc("reserve_devices", {
+    p_request_id: input.toRequestId,
+    p_line_id: input.toLineId,
+    p_device_ids: moving,
+    p_actor: profile.displayName,
+    p_reason: `Reallocated from ${[...bySource.keys()].map((id) => codeOf.get(id)).join(", ")}: ${reason}`,
+  });
+  if (reserveError) {
+    for (const [sourceId, list] of bySource) {
+      const byLine = new Map<string, string[]>();
+      for (const d of list) {
+        const key = d.lineId ?? "";
+        byLine.set(key, [...(byLine.get(key) ?? []), d.id]);
+      }
+      for (const [lineId, ids] of byLine) {
+        await admin.rpc("reserve_devices", {
+          p_request_id: sourceId,
+          p_line_id: lineId || null,
+          p_device_ids: ids,
+          p_actor: profile.displayName,
+          p_reason: "Reallocation failed, devices returned",
+        });
+      }
+    }
+    return { ok: false, message: await friendlyReserveError(reserveError.message) };
+  }
+
+  // 3. log on both sides; the source gets the "pick a replacement" banner
+  for (const [sourceId, list] of bySource) {
+    const ids = list.map((d) => d.id).join(", ");
+    await logDecision({
+      requestId: sourceId,
+      actor: profile.displayName,
+      action: "reallocate",
+      fromValue: codeOf.get(sourceId) ?? null,
+      toValue: target.code,
+      detail: ids,
+      reason,
+    });
+    await logDecision({
+      requestId: sourceId,
+      actor: profile.displayName,
+      action: "note",
+      fromValue: null,
+      toValue: null,
+      detail: `Needs a replacement device: ${ids} moved to ${target.code}`,
+    });
+    await logDecision({
+      requestId: input.toRequestId,
+      actor: profile.displayName,
+      action: "reallocate",
+      fromValue: codeOf.get(sourceId) ?? null,
+      toValue: target.code,
+      detail: ids,
+      reason,
+    });
+    await syncRequestStatus(sourceId, profile.displayName);
+  }
+  await syncRequestStatus(input.toRequestId, profile.displayName);
   return { ok: true };
 }

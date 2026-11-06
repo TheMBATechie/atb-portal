@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getSelectedSite } from "@/lib/site";
 import { Button } from "@/components/ui/button";
 import { DeviceIdTag } from "@/components/device-id-tag";
 import { createAdminClient } from "@/lib/supabase/server-admin";
@@ -28,6 +29,8 @@ export default async function StaffInventoryPage({
     )
     .order("id");
 
+  const site = await getSelectedSite();
+  if (site) query = query.eq("site_id", site);
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("device_category", category);
   if (win11) query = query.eq("win11_ready", win11);
