@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server-admin";
-import { DeviceIdTag } from "@/components/device-id-tag";
-import { DeviceAdvanceButton } from "@/components/device-advance-button";
 import { getSelectedSite } from "@/lib/site";
+import { VolunteerQueue, type QueueGroup, type QueueRow } from "@/components/volunteer-queue";
 
 export const instant = false;
 
-const ZONES = ["Quality Assurance Zone", "Technical Prep Zone", "Ready For Deployment"] as const;
-const BACKLOG_ZONES = ["Quality Assurance Zone", "Technical Prep Zone"] as const;
-const BACKLOG_LIMIT = 20;
-const DATE_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const ZONES = [
+  { status: "Quality Assurance Zone", title: "Quality Assurance Zone" },
+  { status: "Technical Prep Zone", title: "Technical Prep Zone" },
+  { status: "Ready For Deployment", title: "Ready For Deployment" },
+] as const;
+const BACKLOG_LIMIT = 25;
 
-type QueueDevice = {
+type DeviceRow = {
   id: string;
   device_type: string;
   device_model: string | null;
@@ -20,56 +21,36 @@ type QueueDevice = {
   location: string | null;
   reserved_request_id: string | null;
 };
-type QueueRequest = {
-  id: string;
-  code: string;
-  org_name: string;
-  staff_priority: number | null;
-  needed_by: string | null;
-};
+type RequestRow = { id: string; code: string; org_name: string; staff_priority: number | null; needed_by: string | null };
 
-function DeviceCard({ device, request }: { device: QueueDevice; request?: QueueRequest }) {
-  return (
-    <li className="space-y-3 rounded-lg border bg-white p-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <DeviceIdTag id={device.id} />
-        <span className="font-medium">{device.device_type}</span>
-        {device.device_model && <span className="text-muted-foreground">{device.device_model}</span>}
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Shelf <span className="font-medium text-zinc-800">{device.location ?? "not set"}</span> · Grade{" "}
-        {device.grade_letter ?? "?"}
-      </p>
-      {request && (
-        <p className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-900">
-          For <span className="font-mono">{request.code}</span> · {request.org_name}
-          {request.needed_by && ` · needed by ${DATE_FORMAT.format(new Date(`${request.needed_by}T00:00:00`))}`}
-        </p>
-      )}
-      {device.status === "Ready For Deployment" ? (
-        request && (
-          <Link href={`/volunteer/picklist/${request.code}`} className="text-sm font-medium text-atb-green hover:underline">
-            Ready. Open the pick list for {request.code} &rarr;
-          </Link>
-        )
-      ) : (
-        <DeviceAdvanceButton deviceId={device.id} status={device.status} />
-      )}
-    </li>
-  );
+function toRow(d: DeviceRow, r?: RequestRow): QueueRow {
+  return {
+    id: d.id,
+    label: d.device_model ? `${d.device_type} · ${d.device_model}` : d.device_type,
+    status: d.status,
+    location: d.location,
+    grade: d.grade_letter,
+    request: r ? { id: r.id, code: r.code, org: r.org_name } : undefined,
+  };
 }
 
 export default async function VolunteerQueuePage({ searchParams }: PageProps<"/volunteer">) {
-  const showAll = (await searchParams).all === "1";
+  const sp = await searchParams;
+  const tab = sp.tab === "backlog" ? "backlog" : "reserved";
+  const showAll = sp.all === "1";
   const supabase = createAdminClient();
+  const site = await getSelectedSite();
   const columns = "id, device_type, device_model, status, grade_letter, location, reserved_request_id";
 
-  const site = await getSelectedSite();
-  let reservedQuery = supabase.from("devices").select(columns).in("status", [...ZONES]).not("reserved_request_id", "is", null);
+  let reservedQuery = supabase
+    .from("devices")
+    .select(columns)
+    .in("status", ZONES.map((z) => z.status))
+    .not("reserved_request_id", "is", null);
   let backlogQuery = supabase
     .from("devices")
     .select(columns)
-    .in("status", [...BACKLOG_ZONES])
+    .in("status", ["Quality Assurance Zone", "Technical Prep Zone"])
     .is("reserved_request_id", null)
     .order("id");
   if (site) {
@@ -86,88 +67,104 @@ export default async function VolunteerQueuePage({ searchParams }: PageProps<"/v
     );
   }
 
-  const reserved: QueueDevice[] = reservedRes.data ?? [];
-  const backlog: QueueDevice[] = backlogRes.data ?? [];
+  const reserved: DeviceRow[] = reservedRes.data ?? [];
+  const backlog: DeviceRow[] = backlogRes.data ?? [];
 
   const requestIds = [...new Set(reserved.map((d) => d.reserved_request_id!))];
   const { data: requestsData } = requestIds.length
     ? await supabase.from("requests").select("id, code, org_name, staff_priority, needed_by").in("id", requestIds)
-    : { data: [] as QueueRequest[] };
-  const requestById = new Map((requestsData ?? []).map((r) => [r.id, r as QueueRequest]));
+    : { data: [] as RequestRow[] };
+  const requestById = new Map((requestsData ?? []).map((r) => [r.id, r as RequestRow]));
 
-  // Most important request first: staff priority (1 = highest), then soonest needed-by.
-  const sortKey = (d: QueueDevice) => {
-    const r = requestById.get(d.reserved_request_id!);
-    return [r?.staff_priority ?? 99, r?.needed_by ?? "9999-12-31", d.id] as const;
-  };
+  // Most important request first: staff priority (1 = highest), then soonest needed-by, then shelf.
   reserved.sort((a, b) => {
-    const ka = sortKey(a);
-    const kb = sortKey(b);
-    return ka[0] - kb[0] || ka[1].localeCompare(kb[1]) || ka[2].localeCompare(kb[2]);
+    const ra = requestById.get(a.reserved_request_id!);
+    const rb = requestById.get(b.reserved_request_id!);
+    return (
+      (ra?.staff_priority ?? 99) - (rb?.staff_priority ?? 99) ||
+      (ra?.needed_by ?? "9999").localeCompare(rb?.needed_by ?? "9999") ||
+      (ra?.code ?? "").localeCompare(rb?.code ?? "") ||
+      (a.location ?? "~").localeCompare(b.location ?? "~")
+    );
   });
 
+  const count = (rows: DeviceRow[], status: string) => rows.filter((d) => d.status === status).length;
+
+  const groups: QueueGroup[] =
+    tab === "reserved"
+      ? ZONES.map((z) => ({
+          key: z.status,
+          title: z.title,
+          rows: reserved
+            .filter((d) => d.status === z.status)
+            .map((d) => toRow(d, requestById.get(d.reserved_request_id!))),
+        }))
+      : ZONES.slice(0, 2).map((z) => {
+          const all = backlog.filter((d) => d.status === z.status);
+          const shown = showAll ? all : all.slice(0, BACKLOG_LIMIT);
+          return {
+            key: z.status,
+            title: z.title,
+            rows: shown.map((d) => toRow(d)),
+            hiddenCount: all.length - shown.length,
+            showAllHref: "/volunteer?tab=backlog&all=1",
+          };
+        });
+
+  const tabClass = (active: boolean) =>
+    `flex-1 rounded-md px-3 py-1.5 text-center text-sm font-semibold ${
+      active ? "bg-atb-navy text-white" : "text-atb-navy hover:bg-zinc-100"
+    }`;
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">What should I work on?</h1>
-        <p className="text-sm text-muted-foreground">
-          Devices set aside for a partner come first, most urgent at the top. Then the general backlog.
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-2xl text-atb-navy">What should I work on?</h1>
+        <p className="text-sm text-zinc-600">
+          Tick devices and use the buttons at the bottom. Tap a request code to see what the partner asked for.
         </p>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Set aside for a request ({reserved.length})</h2>
-        {reserved.length === 0 && (
-          <p className="rounded-lg border border-dashed bg-white p-4 text-sm text-muted-foreground">
-            Nothing is set aside right now. Work on the backlog below.
-          </p>
-        )}
-        {ZONES.map((zone) => {
-          const devices = reserved.filter((d) => d.status === zone);
-          if (devices.length === 0) return null;
-          return (
-            <div key={zone} className="space-y-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-600">
-                {zone} ({devices.length})
-              </h3>
-              <ul className="space-y-2">
-                {devices.map((d) => (
-                  <DeviceCard key={d.id} device={d} request={requestById.get(d.reserved_request_id!)} />
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </section>
+      {/* Summary strip: devices set aside for partners */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Stat value={count(reserved, "Quality Assurance Zone")} label="to QA" />
+        <Stat value={count(reserved, "Technical Prep Zone")} label="in prep" />
+        <Stat value={count(reserved, "Ready For Deployment")} label="ready to pack" />
+      </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Backlog (not set aside yet)</h2>
-        {BACKLOG_ZONES.map((zone) => {
-          const all = backlog.filter((d) => d.status === zone);
-          const devices = showAll ? all : all.slice(0, BACKLOG_LIMIT);
-          return (
-            <div key={zone} className="space-y-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-600">
-                {zone} ({all.length})
-              </h3>
-              {all.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing waiting here.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {devices.map((d) => (
-                    <DeviceCard key={d.id} device={d} />
-                  ))}
-                </ul>
-              )}
-              {!showAll && all.length > BACKLOG_LIMIT && (
-                <Link href="/volunteer?all=1" className="text-sm text-atb-green hover:underline">
-                  Show all {all.length}
-                </Link>
-              )}
-            </div>
-          );
-        })}
-      </section>
+      <nav className="flex gap-1 rounded-lg border bg-white p-1" aria-label="Queue">
+        <Link href="/volunteer" className={tabClass(tab === "reserved")} aria-current={tab === "reserved" ? "page" : undefined}>
+          For requests ({reserved.length})
+        </Link>
+        <Link
+          href="/volunteer?tab=backlog"
+          className={tabClass(tab === "backlog")}
+          aria-current={tab === "backlog" ? "page" : undefined}
+        >
+          Backlog ({backlog.length})
+        </Link>
+      </nav>
+
+      {tab === "reserved" && reserved.length === 0 ? (
+        <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-zinc-600">
+          Nothing is set aside for a request right now.{" "}
+          <Link href="/volunteer?tab=backlog" className="font-medium text-atb-green hover:underline">
+            Work on the backlog
+          </Link>
+          .
+        </p>
+      ) : (
+        <VolunteerQueue key={tab} groups={groups} />
+      )}
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="rounded-xl border bg-white px-2 py-2.5">
+      <p className="font-heading text-2xl font-extrabold text-atb-navy">{value}</p>
+      <p className="text-xs text-zinc-600">{label}</p>
     </div>
   );
 }

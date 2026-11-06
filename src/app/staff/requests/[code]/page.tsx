@@ -21,6 +21,7 @@ import { loadMatchableDevices } from "@/lib/match-data";
 import { HandoffPanel } from "@/components/handoff-panel";
 import { FeedbackList } from "@/components/feedback-form";
 import { StaffFeedback } from "@/components/staff-feedback";
+import { ResolveConcerns } from "@/components/resolve-concerns";
 
 export const instant = false;
 
@@ -196,6 +197,15 @@ export default async function StaffRequestDetailPage({
   const needsReplacement =
     !!lastReplacementNote && (!lastReserve || lastReserve.created_at < lastReplacementNote.created_at);
 
+  // Volunteer flags ("this device doesn't fit the ask") stay open until staff mark them resolved.
+  const lastResolved = decisionLog.find((e) => e.action === "note" && e.detail === "Concerns resolved");
+  const openConcerns = decisionLog.filter(
+    (e) =>
+      e.action === "note" &&
+      (e.detail ?? "").startsWith("Volunteer concern") &&
+      (!lastResolved || e.created_at > lastResolved.created_at)
+  );
+
   const toggleHref = (holds: boolean, held: boolean) => {
     const q = [holds && "holds=1", held && "held=1"].filter(Boolean).join("&");
     return `/staff/requests/${request.code}${q ? `?${q}` : ""}`;
@@ -282,6 +292,27 @@ export default async function StaffRequestDetailPage({
         <p className="mt-1 font-heading text-lg font-bold text-atb-navy">{next.title}</p>
         {next.body && <p className="mt-1 text-sm text-atb-navy/80">{next.body}</p>}
       </section>
+
+      {openConcerns.length > 0 && (
+        <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 sm:p-5">
+          <p className="font-heading text-lg font-bold text-amber-950">
+            {openConcerns.length} volunteer flag{openConcerns.length === 1 ? "" : "s"} to review
+          </p>
+          <ul className="space-y-2 text-sm text-amber-950">
+            {openConcerns.map((c) => (
+              <li key={c.id}>
+                <span className="font-semibold">{c.actor}</span>
+                {c.detail?.startsWith("Volunteer concern about ") && (
+                  <span className="font-mono text-xs"> · {c.detail.slice("Volunteer concern about ".length)}</span>
+                )}
+                <span className="text-amber-800"> · {DATETIME_FORMAT.format(new Date(c.created_at))}</span>
+                <p>&ldquo;{c.reason}&rdquo;</p>
+              </li>
+            ))}
+          </ul>
+          <ResolveConcerns requestId={request.id} />
+        </section>
+      )}
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         {/* Main column */}

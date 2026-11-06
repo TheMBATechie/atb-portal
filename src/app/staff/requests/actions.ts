@@ -530,3 +530,19 @@ export async function reallocateDevices(input: {
   await syncRequestStatus(input.toRequestId, profile.displayName);
   return { ok: true };
 }
+
+// Staff close open volunteer concerns on a request (after checking or changing the devices).
+export async function resolveConcerns(input: { requestId: string; note: string }): Promise<ActionResult> {
+  const profile = await requireStaffActor();
+  if (!profile) return { ok: false, message: NOT_STAFF_ERROR };
+  await logDecision({
+    requestId: input.requestId,
+    actor: profile.displayName,
+    action: "note",
+    fromValue: null,
+    toValue: null,
+    detail: "Concerns resolved",
+    reason: input.note.trim().slice(0, 1000) || null,
+  });
+  return { ok: true };
+}

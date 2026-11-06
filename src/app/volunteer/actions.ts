@@ -89,3 +89,54 @@ export async function advanceDevice(input: { deviceId: string; qaResult?: QaResu
   if (requestId) await syncRequestStatus(requestId, profile.displayName);
   return { ok: true };
 }
+
+// Bulk version for the work queue: same rules as advanceDevice, one device at a time.
+// QA Fail is not allowed in bulk (it releases devices, so it's done one by one with a confirm).
+export async function advanceDevices(input: {
+  deviceIds: string[];
+  qaResult?: "Pass" | "Pass with Approved Limitation";
+}): Promise<{ ok: true; done: number; failed: string[] } | { ok: false; message: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Please sign in again." };
+  if (input.deviceIds.length === 0) return { ok: false, message: "Tick at least one device." };
+  if (input.deviceIds.length > 100) return { ok: false, message: "Please do at most 100 devices at a time." };
+
+  let done = 0;
+  const failed: string[] = [];
+  for (const deviceId of input.deviceIds) {
+    const result = await advanceDevice({ deviceId, qaResult: input.qaResult });
+    if (result.ok) done++;
+    else failed.push(deviceId);
+  }
+  return { ok: true, done, failed };
+}
+
+// Volunteers can't change reservations, but they can push back: "this device doesn't fit the ask".
+// Staff see open flags on the request page until they mark them resolved.
+const CONCERN_PREFIX = "Volunteer concern"; // staff page matches on this text
+export async function flagConcern(input: {
+  requestId: string;
+  deviceId?: string | null;
+  message: string;
+}): Promise<ActionResult> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, message: "Please sign in again." };
+  const message = input.message.trim().slice(0, 1000);
+  if (!message) return { ok: false, message: "Tell staff what doesn't look right." };
+
+  const admin = createAdminClient();
+  const { data: request } = await admin.from("requests").select("id").eq("id", input.requestId).maybeSingle();
+  if (!request) return { ok: false, message: "That request couldn't be found. Reload the page." };
+
+  await logDecision({
+    requestId: request.id,
+    deviceId: input.deviceId ?? null,
+    actor: profile.displayName,
+    action: "note",
+    fromValue: null,
+    toValue: null,
+    detail: `${CONCERN_PREFIX}${input.deviceId ? ` about ${input.deviceId}` : ""}`,
+    reason: message,
+  });
+  return { ok: true };
+}
