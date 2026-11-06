@@ -1,4 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { connection } from "next/server";
+import { getCurrentProfile } from "@/lib/auth";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export function BrandMark() {
   return (
@@ -12,6 +17,38 @@ export function BrandMark() {
       <span className="font-heading text-lg leading-none font-extrabold tracking-tight text-atb-navy">
         Atlanta Tech Bank
       </span>
+    </span>
+  );
+}
+
+const signInClass =
+  "rounded-md bg-atb-navy px-4 py-2 font-semibold text-white transition-colors hover:bg-atb-navy/85";
+
+// Right side of the header: "Sign in" for visitors; area link, name and sign out when signed in.
+async function AccountArea() {
+  await connection(); // per-request: depends on the visitor's session
+  // Skip the auth round-trip entirely for visitors with no session cookie.
+  const hasSession = (await cookies()).getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+  const profile = hasSession ? await getCurrentProfile() : null;
+
+  if (!profile) {
+    return (
+      <Link href="/login" className={signInClass}>
+        Sign in
+      </Link>
+    );
+  }
+
+  const home = profile.role === "staff" ? { href: "/staff", label: "Staff dashboard" } : { href: "/volunteer", label: "Work queue" };
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Link href={home.href} className={signInClass}>
+        {home.label}
+      </Link>
+      <span className="text-atb-navy/70" title={profile.role === "staff" ? "Signed in as staff" : "Signed in as volunteer"}>
+        {profile.displayName}
+      </span>
+      <SignOutButton />
     </span>
   );
 }
@@ -30,12 +67,9 @@ export function Header() {
           <Link href="/status" className="hover:text-atb-coral">
             Check a request
           </Link>
-          <Link
-            href="/login"
-            className="rounded-md bg-atb-navy px-4 py-2 font-semibold text-white transition-colors hover:bg-atb-navy/85"
-          >
-            Sign in
-          </Link>
+          <Suspense fallback={<span className="inline-block h-9 w-20" aria-hidden="true" />}>
+            <AccountArea />
+          </Suspense>
         </nav>
       </div>
     </header>

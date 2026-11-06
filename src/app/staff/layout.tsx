@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SignOutButton } from "@/components/sign-out-button";
 import { requireStaff } from "@/lib/auth";
 import { SiteSwitcher } from "@/components/site-switcher";
 import { getSelectedSite, listSites } from "@/lib/site";
@@ -8,7 +7,7 @@ import { getSelectedSite, listSites } from "@/lib/site";
 export const instant = false;
 
 export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
-  const profile = await requireStaff();
+  await requireStaff();
   const [sites, selectedSite] = await Promise.all([listSites(), getSelectedSite()]);
 
   return (
@@ -34,8 +33,6 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <SiteSwitcher sites={sites} selected={selectedSite} />
-            <span>{profile.displayName}</span>
-            <SignOutButton />
           </div>
         </div>
       </nav>

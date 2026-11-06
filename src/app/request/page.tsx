@@ -10,14 +10,14 @@ export default async function RequestPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:py-10">
-      <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-bold">Request devices</h1>
-        <p className="text-sm text-muted-foreground">
-          Tell us what you need in plain language. Fields marked{" "}
-          <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-            Must
+      <div className="mb-6 space-y-2">
+        <h1 className="text-3xl text-atb-navy">Request devices</h1>
+        <p className="text-zinc-600">
+          Five short steps, about two minutes. Answers marked <span className="inline-flex items-center gap-1 font-medium text-atb-navy">
+            <span className="size-1.5 rounded-full bg-atb-coral" aria-hidden="true" />
+            Required
           </span>{" "}
-          are required &mdash; everything else is optional and just helps us plan.
+          are needed to plan your request. Everything else is optional and just helps us plan.
         </p>
       </div>
 

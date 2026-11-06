@@ -23,10 +23,10 @@ export type SubmitRequestInput = {
   osPref: OsPref;
   osFirm: boolean;
   needs: Need[];
-  neededBy: string; // yyyy-mm-dd
-  lateImpact: string;
+  needsOther: string; // description when "Other" is one of the needs
+  neededBy: string | null; // yyyy-mm-dd, or null for "no fixed date"
+  lateImpact: string; // asked only for medium/high urgency
   partnerUrgency: Urgency | null;
-  urgencyReason: string;
   allowPartial: boolean;
   allowSubstitutes: boolean;
   setup: Setup;
@@ -43,24 +43,60 @@ export async function submitRequest(input: SubmitRequestInput): Promise<SubmitRe
   const contactName = input.contactName.trim();
   const contactEmail = input.contactEmail.trim();
   const purposeDetail = input.purposeDetail.trim();
-  const lateImpact = input.lateImpact.trim();
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 
+  // Same rules as the form, enforced here so contradictory answers can't be saved.
   if (!orgName) return { ok: false, message: "Tell us which organization you're with." };
   if (!contactName) return { ok: false, message: "Your name is required." };
-  if (!contactEmail || !contactEmail.includes("@")) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
     return { ok: false, message: "A valid email address is required." };
   }
   if (!input.purpose) {
     return { ok: false, message: "Tell us what people will use these devices for." };
   }
-  const lines = input.lines.filter((line) => line.quantity > 0);
+  if (input.purpose === "other" && !purposeDetail) {
+    return { ok: false, message: "You picked Other. Tell us what the devices are for." };
+  }
+  if (input.peopleServed !== null && (!Number.isInteger(input.peopleServed) || input.peopleServed < 1)) {
+    return { ok: false, message: "Number of people served must be a whole number of 1 or more." };
+  }
+
+  // One line per device type: merge duplicates instead of saving two "laptop" lines.
+  const merged = new Map<RequestLineInput["deviceCategory"], number>();
+  for (const line of input.lines) {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) continue;
+    merged.set(line.deviceCategory, Math.min(500, (merged.get(line.deviceCategory) ?? 0) + line.quantity));
+  }
+  const lines = [...merged.entries()].map(([deviceCategory, quantity]) => ({ deviceCategory, quantity }));
   if (lines.length === 0) {
     return { ok: false, message: "Add at least one device with a quantity of at least 1." };
   }
-  if (!input.neededBy) return { ok: false, message: "Tell us when you need these devices." };
-  if (!lateImpact) {
-    return { ok: false, message: "Tell us what happens if the devices arrive later than needed." };
+  const totalDevices = lines.reduce((n, l) => n + l.quantity, 0);
+
+  const needsOther = input.needs.includes("other") ? input.needsOther.trim() : "";
+  if (input.needs.includes("other") && !needsOther) {
+    return { ok: false, message: "You picked Other under special needs. Tell us what else the devices need." };
   }
+
+  if (input.neededBy !== null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.neededBy)) return { ok: false, message: "Pick a valid date." };
+    if (input.neededBy < today) return { ok: false, message: "The need-by date can't be in the past." };
+  }
+
+  // Late impact only makes sense when the request is urgent; low/no urgency drops it.
+  const urgent = input.partnerUrgency === "medium" || input.partnerUrgency === "high";
+  const lateImpact = urgent ? input.lateImpact.trim() : "";
+  if (input.partnerUrgency === "high" && !lateImpact) {
+    return { ok: false, message: "For high urgency, tell us what happens if the devices arrive late." };
+  }
+
+  const setupNotes = input.setup === "preset" ? input.setupNotes.trim() : "";
+  if (input.setup === "preset" && !setupNotes) {
+    return { ok: false, message: "Describe the setup you need, or choose Out of the box." };
+  }
+
+  const osFirm = input.osPref === "any" ? false : input.osFirm;
+  const allowPartial = totalDevices > 1 ? input.allowPartial : true;
 
   const supabase = createAdminClient();
 
@@ -113,13 +149,14 @@ export async function submitRequest(input: SubmitRequestInput): Promise<SubmitRe
       use_type: input.useType,
       people_served: input.peopleServed,
       needed_by: input.neededBy,
-      late_impact: lateImpact,
+      late_impact: lateImpact || null,
       partner_urgency: input.partnerUrgency,
-      urgency_reason: input.urgencyReason.trim() || null,
-      allow_partial: input.allowPartial,
+      // The form asks one timing question; keep the reason column in step with it.
+      urgency_reason: lateImpact || null,
+      allow_partial: allowPartial,
       allow_substitutes: input.allowSubstitutes,
       setup: input.setup,
-      setup_notes: input.setupNotes.trim() || null,
+      setup_notes: setupNotes || null,
       raw_text: input.rawText?.trim().slice(0, 10000) || null,
     })
     .select("id, code")
@@ -141,8 +178,9 @@ export async function submitRequest(input: SubmitRequestInput): Promise<SubmitRe
       device_category: line.deviceCategory,
       quantity: line.quantity,
       os_pref: input.osPref,
-      os_firm: input.osFirm,
+      os_firm: osFirm,
       needs: input.needs,
+      notes: needsOther ? `Other needs: ${needsOther}` : null,
     }))
   );
 

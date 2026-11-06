@@ -258,7 +258,7 @@ export default async function StaffRequestDetailPage({
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Needed by</dt>
-            <dd>{fmtDate(request.needed_by)}</dd>
+            <dd>{request.needed_by ? fmtDate(request.needed_by) : "No fixed date"}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Late impact</dt>
@@ -268,7 +268,7 @@ export default async function StaffRequestDetailPage({
             <dt className="text-xs text-muted-foreground">Partner urgency</dt>
             <dd>
               {labelFor(URGENCY_OPTIONS, request.partner_urgency)}
-              {request.urgency_reason ? ` — ${request.urgency_reason}` : ""}
+              {request.urgency_reason && request.urgency_reason !== request.late_impact ? ` — ${request.urgency_reason}` : ""}
             </dd>
           </div>
           <div>

@@ -28,6 +28,7 @@ export function LoginForm() {
       return;
     }
     router.push(result.role === "staff" ? "/staff" : "/volunteer");
+    router.refresh(); // update the header to the signed-in state
   }
 
   return (

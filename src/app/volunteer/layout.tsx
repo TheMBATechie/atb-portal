@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SignOutButton } from "@/components/sign-out-button";
 import { requireSignedIn } from "@/lib/auth";
 import { SiteSwitcher } from "@/components/site-switcher";
 import { getSelectedSite, listSites } from "@/lib/site";
@@ -26,8 +25,6 @@ export default async function VolunteerLayout({ children }: LayoutProps<"/volunt
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <SiteSwitcher sites={sites} selected={selectedSite} />
-            <span>{profile.displayName}</span>
-            <SignOutButton />
           </div>
         </div>
       </nav>

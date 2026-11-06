@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
+import { getCurrentProfile } from "@/lib/auth";
 
 export const instant = false;
 
@@ -7,6 +9,10 @@ function first(value: string | string[] | undefined): string {
 }
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  // Already signed in? Go straight to your area instead of showing the form again.
+  const profile = await getCurrentProfile();
+  if (profile) redirect(profile.role === "staff" ? "/staff" : "/volunteer");
+
   const sp = await searchParams;
   const redirectTo = first(sp.redirectTo);
 

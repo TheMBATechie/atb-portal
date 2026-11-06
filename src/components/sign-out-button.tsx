@@ -16,18 +16,20 @@ export function SignOutButton() {
     const result = await logout();
     setPending(false);
     if (result.ok) {
-      router.push("/login");
+      // Go home and re-render the header so it shows "Sign in" again.
+      router.push("/");
+      router.refresh();
       return;
     }
     setError(result.message);
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <span className="flex items-center gap-2">
       <Button variant="ghost" size="sm" onClick={handleClick} disabled={pending}>
         {pending ? "Signing out…" : "Sign out"}
       </Button>
       {error && <span className="text-xs text-destructive">{error}</span>}
-    </div>
+    </span>
   );
 }

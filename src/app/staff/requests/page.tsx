@@ -162,7 +162,7 @@ export default async function StaffRequestsPage() {
                     <p className="text-xs text-muted-foreground">{deviceSummary}</p>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
-                        Needed by {r.needed_by ? DATE_FORMAT.format(new Date(`${r.needed_by}T00:00:00`)) : "Not set"}
+                        {r.needed_by ? `Needed by ${DATE_FORMAT.format(new Date(`${r.needed_by}T00:00:00`))}` : "No fixed date"}
                       </span>
                       <span>{r.partner_urgency ? URGENCY_LABELS.get(r.partner_urgency) : "No urgency set"}</span>
                     </div>
