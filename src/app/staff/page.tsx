@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { DEVICE_STATUSES, isDeviceCategory } from "@/lib/devices";
 import { getSelectedSite } from "@/lib/site";
+import Link from "next/link";
+import { staffStatusLabel } from "@/lib/requests";
 
 export const instant = false;
 
@@ -36,7 +38,10 @@ export default async function StaffOverviewPage() {
   const supabase = createAdminClient();
   const site = await getSelectedSite();
   let devicesQuery = supabase.from("devices").select("status, device_category, reserved_request_id, import_flags");
-  let requestsQuery = supabase.from("requests").select("status");
+  let requestsQuery = supabase
+    .from("requests")
+    .select("code, org_name, status, bucket, staff_priority, needed_by")
+    .order("staff_priority", { ascending: true, nullsFirst: false });
   if (site) {
     devicesQuery = devicesQuery.eq("site_id", site);
     requestsQuery = requestsQuery.eq("site_id", site);
@@ -54,6 +59,11 @@ export default async function StaffOverviewPage() {
 
   const devices = devicesRes.data ?? [];
   const requests = requestsRes.data ?? [];
+  // This month's plan: requests staff put in the "This month" bucket that aren't finished yet.
+  const thisMonth = requests.filter(
+    (r) => r.bucket === "this_month" && !["delivered", "partially_delivered", "closed", "declined"].includes(r.status)
+  );
+  const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
   // Reservation is NOT a status (PLAN.md section 4) — a reserved device still
   // shows under its real status row; "reserved" is a separate column.
@@ -143,6 +153,38 @@ export default async function StaffOverviewPage() {
         </div>
       </section>
 
+      <section className="rounded-lg border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="font-semibold">This month&apos;s plan ({thisMonth.length})</h2>
+          <Link href="/staff/requests" className="text-sm text-muted-foreground hover:underline">
+            Planning board &rarr;
+          </Link>
+        </div>
+        {thisMonth.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing planned for this month yet. Move requests to &quot;This month&quot; on the planning board.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {thisMonth.map((r) => (
+              <li key={r.code} className="flex flex-wrap items-baseline justify-between gap-2">
+                <span>
+                  <Link href={`/staff/requests/${r.code}`} className="font-mono text-xs hover:underline">
+                    {r.code}
+                  </Link>{" "}
+                  <span className="font-medium">{r.org_name}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {staffStatusLabel(r.status, r.bucket)}
+                  {r.staff_priority ? ` · priority ${r.staff_priority}` : ""}
+                  {r.needed_by ? ` · needed by ${shortDate.format(new Date(`${r.needed_by}T00:00:00`))}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <div className="grid gap-6 sm:grid-cols-2">
         <section className="rounded-lg border bg-white p-4">
           <h2 className="mb-3 font-semibold">Requests by status</h2>
@@ -152,7 +194,7 @@ export default async function StaffOverviewPage() {
             <ul className="space-y-1 text-sm">
               {requestRows.map(([status, count]) => (
                 <li key={status} className="flex justify-between">
-                  <span className="capitalize">{status.replace(/_/g, " ")}</span>
+                  <span>{status === "scheduled" ? "Planned" : staffStatusLabel(status, null)}</span>
                   <span className="font-medium">{count}</span>
                 </li>
               ))}

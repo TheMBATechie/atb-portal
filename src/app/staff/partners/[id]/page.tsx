@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server-admin";
-import { REQUEST_LINE_CATEGORIES, requestStatusLabel } from "@/lib/requests";
+import { REQUEST_LINE_CATEGORIES, staffStatusLabel } from "@/lib/requests";
 import { DeviceIdTag } from "@/components/device-id-tag";
 import { FeedbackList } from "@/components/feedback-form";
 
@@ -84,7 +84,7 @@ export default async function PartnerPage({ params }: PageProps<"/staff/partners
                 <Link href={`/staff/requests/${r.code}`} className="font-mono hover:underline">
                   {r.code}
                 </Link>
-                <span className="font-medium">{requestStatusLabel(r.status, r.bucket)}</span>
+                <span className="font-medium">{staffStatusLabel(r.status, r.bucket)}</span>
                 <span className="text-muted-foreground">
                   {(r.request_lines ?? [])
                     .map((l) => `${l.quantity}× ${CATEGORY_LABELS.get(l.device_category) ?? l.device_category}`)

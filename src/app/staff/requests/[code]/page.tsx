@@ -10,7 +10,7 @@ import {
   SETUP_OPTIONS,
   URGENCY_OPTIONS,
   USE_TYPE_OPTIONS,
-  requestStatusLabel,
+  staffStatusLabel,
 } from "@/lib/requests";
 import { suggestedPriorityScore } from "@/lib/priority-score";
 import { PriorityBucketControls } from "@/components/priority-bucket-controls";
@@ -227,7 +227,7 @@ export default async function StaffRequestDetailPage({
               request.org_name
             )}
           </h1>
-          <p className="text-sm text-muted-foreground">{requestStatusLabel(request.status, request.bucket)}</p>
+          <p className="text-sm text-muted-foreground">{staffStatusLabel(request.status, request.bucket)}</p>
         </div>
         <Link href="/staff/requests" className="text-sm text-muted-foreground hover:underline">
           &larr; Back to planning board
@@ -324,7 +324,7 @@ export default async function StaffRequestDetailPage({
                       {r.code}
                     </Link>
                     {" — "}
-                    {requestStatusLabel(r.status, r.bucket)}
+                    {staffStatusLabel(r.status, r.bucket)}
                   </li>
                 ))}
               </ul>

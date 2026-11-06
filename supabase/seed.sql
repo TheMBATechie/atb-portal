@@ -559,5 +559,14 @@ insert into requests (id, code, partner_id, org_name, contact_email, contact_nam
 insert into request_lines (id, request_id, device_category, quantity, os_pref, os_firm, min_grade) values ('38780ba7-5815-5d76-91b8-b26fa609a54f', 'a8a6e8e0-d304-5a34-9c7b-6a3a0eb49ebd', 'laptop', 1, 'mac', true, 'A');
 insert into decision_log (request_id, actor, action, from_value, to_value, detail, reason, created_at) values ('a8a6e8e0-d304-5a34-9c7b-6a3a0eb49ebd', 'system', 'create', null, 'submitted', null, null, '2026-11-04');
 select setval('request_code_seq', 1006);   -- next new request is REQ-1007
+-- The truncate above cascades to profiles (profiles.site_id references sites).
+-- Re-link the demo logins so a reset never locks staff out. Users in
+-- Authentication are untouched; this only restores their roles.
+insert into profiles (id, role, display_name)
+select id, 'staff', 'Jimmy (staff)' from auth.users where email = 'staff@example.org'
+on conflict (id) do nothing;
+insert into profiles (id, role, display_name)
+select id, 'volunteer', 'Sam (volunteer)' from auth.users where email = 'volunteer@example.org'
+on conflict (id) do nothing;
 commit;
 -- import notes: duplicate ID suffixed, 16 deployment dates moved from 2016 to 2026

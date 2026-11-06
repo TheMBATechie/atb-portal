@@ -17,7 +17,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 | 6 | AI intake | done |
 | 7 | Partner history, feedback, impact | built + committed, user testing deferred to end |
 | 8 | Nice-to-haves | built + committed, user testing deferred to end |
-| 9 | Polish | todo |
+| 9 | Polish | built + committed, user testing deferred to end |
 
 ## Skipped or known issues
 
@@ -41,7 +41,7 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - MVP checkpoint (demo steps 3–5): two demo breakers fixed.
   - Staff had no way to allow substitutes. The match panel now has an "Allow substitutes…" control (reason required, logged as `note`), so ATB-26-5321 can be offered as grade C.
   - The double-booking block could only be shown with stale tabs. The match panel now has "Show devices held by other requests" (`?held=1`): held devices show a red "Held by REQ-…" badge, are never preselected, and reserving one hits the database DOUBLE_ALLOCATION block with the friendly message.
-- Known issue (fix in Stage 9 demo reset): `seed.sql` runs `truncate … sites … cascade`, which also wipes `profiles` (FK to sites). After every seed reset, re-run the two `insert into profiles` statements from PROMPTS.md Stage 3. Auth users survive.
+- Fixed in Stage 9: `seed.sql` runs `truncate … sites … cascade`, which also wipes `profiles` (FK to sites). The seed now re-inserts the two demo profiles at the end (`on conflict do nothing`). Other added users need their profiles line re-run after a reset (README explains).
 - MVP checkpoint: demo steps 3–5 verified on the deployed URL after a seed reset (Nov 5).
 - Stage 6: Gemini is called with plain `fetch` (no SDK) from `src/lib/ai-intake.ts`, with structured JSON output, checked with zod (approved by the user). If `GEMINI_MODEL` returns 503/429/404 or times out (10s), it tries `gemini-3.5-flash`, then `gemini-3.5-flash-lite`. On Nov 5 evening `gemini-3.8-flash` was often overloaded (503). With no key or every model failing, the form shows a one-line note and works as normal.
 - Stage 6: AI-filled sections get a violet highlight. The text the AI read is saved to `requests.raw_text`. Staff "Paste an email" is at `/staff/requests/new` (linked from the planning board) and opens the new request after creating it.
@@ -54,6 +54,9 @@ Deadline: working link by 8:00 AM Nov 6. Feature freeze at 2:15 AM.
 - Stage 8: site switcher (staff + volunteer nav) stores `atb_site` in a cookie. It filters the overview, inventory, planning board and volunteer queue. Matching always uses the request's own `site_id`. The seed has one site (`atl`), so with nothing chosen it shows "All sites".
 - Stage 8: the pick list was already sorted by shelf location (Stage 5).
 - Stage 8: fixed device-ID parsing in friendly error messages. IDs also look like `ATB-iPad-25-5438` / `ATB-26-5321-B`, and those weren't named in the double-booking / handoff errors before.
+- Stage 9: staff pages now use `staffStatusLabel` (New / Matched / Partially matched / In prep…). Partner pages keep the friendlier `requestStatusLabel` ("Being prepared"). Before this, staff screens showed "Being prepared" for matched requests.
+- Stage 9: added "This month's plan" to `/staff`. It was skipped in Stage 1 and never added in Stage 3.
+- Stage 9: loading states (`loading.tsx`) for staff, volunteer, request and status pages. The nav wraps on phones, the header links home, and the README has "How ATB runs this". There's no automatic Google Sheet importer: the README documents a manual CSV import.
 - Stage 5: a QA Fail on a reserved device releases it (`release_devices`) and logs a `note` "Needs a replacement device…". The staff request page shows an amber banner until the next reservation. There's no extra flag column.
 - Stage 5: pick list ticks are a packing aid kept on screen only, not saved. The real handoff is staff's "Confirm handoff" (`fulfill_devices`), then delivered / partially_delivered by placed count vs needed.
 - Stage 5: requests that are delivered / partially delivered / declined / closed can't be matched further. Remaining reserved devices on a partially delivered request can still be handed off.

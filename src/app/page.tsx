@@ -37,7 +37,7 @@ export default async function HomePage() {
         <footer className="pt-10 text-sm text-zinc-500">
           {error
             ? "Devices tracked: unable to reach the database right now."
-            : `Devices tracked in the warehouse: ${count ?? 0}`}
+            : `Devices tracked so far: ${count ?? 0}`}
         </footer>
       </main>
     </div>

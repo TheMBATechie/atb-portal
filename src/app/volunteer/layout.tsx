@@ -13,7 +13,7 @@ export default async function VolunteerLayout({ children }: LayoutProps<"/volunt
   return (
     <div className="flex flex-1 flex-col bg-zinc-50">
       <nav className="border-b bg-white">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-2 text-sm">
+        <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
           <div className="flex items-center gap-3">
             <Link href="/volunteer" className="font-medium hover:underline">
               Work queue

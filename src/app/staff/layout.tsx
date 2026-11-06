@@ -14,7 +14,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   return (
     <div className="flex flex-1 flex-col bg-zinc-50">
       <nav className="border-b bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-2">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-2">
           <div className="flex flex-wrap gap-1">
             <Button asChild variant="ghost" size="sm">
               <Link href="/staff">Overview</Link>
@@ -32,7 +32,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
               <Link href="/staff/impact">Impact</Link>
             </Button>
           </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <SiteSwitcher sites={sites} selected={selectedSite} />
             <span>{profile.displayName}</span>
             <SignOutButton />

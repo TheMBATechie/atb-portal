@@ -112,3 +112,35 @@ export function requestStatusLabel(
       return status;
   }
 }
+
+// --- Staff-facing status labels ---------------------------------------------
+// Staff need the precise stage (matched vs partially matched); partners get the
+// friendlier wording above.
+export function staffStatusLabel(status: string, bucket: string | null, now: Date = new Date()): string {
+  switch (status) {
+    case "submitted":
+      return "New";
+    case "needs_info":
+      return "Waiting on partner info";
+    case "scheduled":
+      return `Planned for ${bucketMonthLabel(bucket, now)}`;
+    case "matched":
+      return "Matched";
+    case "partially_matched":
+      return "Partially matched";
+    case "in_prep":
+      return "In prep";
+    case "ready_for_pickup":
+      return "Ready for pickup";
+    case "delivered":
+      return "Delivered";
+    case "partially_delivered":
+      return "Partially delivered";
+    case "declined":
+      return "Declined";
+    case "closed":
+      return "Closed";
+    default:
+      return status;
+  }
+}
